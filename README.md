@@ -15,14 +15,12 @@
 ## Getting started
 
 ```bash
-npm init -y
-rm main.js
 curl -o backup.sh https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/backup.sh
 chmod +x backup.sh
 ./backup.sh
 npm i htmltojsx prettier node-html-parser ora chalk fs-extra
-curl -o main.js https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/migration.js
-node main.js <process?function,class>
+curl -o migration.js https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/migration.js
+node migration.js <process?function,class>
 cd vite
 yarn dev
 ```
