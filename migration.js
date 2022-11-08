@@ -68,6 +68,8 @@ if (!processName)
     process.exit(1)
 }
 
+let componentDidMountJs;
+
 log("Starting migration process: " + processName);
 let functionName;
 
@@ -443,11 +445,9 @@ function handleFile(html, logPrefix, name, findComponents)
                 // Copy file to assets folder
                 fs.copyFileSync("./" + link, assetsFolder + "/" + link);
 
-                // File is extra javascript, comment file contents
+                // File is extra javascript, put in main layout componentdidmount
                 const fileContents = fs.readFileSync(assetsFolder + "/" + link, "utf8");
-                const commentedFileContents = fileContents.replace(/^(?!\s*\/\/)/gm, "//");
-                fs.writeFileSync(assetsFolder + "/" + link, commentedFileContents);
-                imports.push(jsImport);
+                componentDidMountJs = fileContents;
             }
             else if (link.includes("https://"))
             {
@@ -766,7 +766,11 @@ if (SidebarContents !== undefined)
 
 
 MainLayoutContents += "import { Outlet } from 'react-router-dom';\n";
-MainLayoutContents += "export default function Main() {\n";
+MainLayoutContents += "export default class Main extends React.Component {\n";
+MainLayoutContents += "    componentDidMount() {\n";
+MainLayoutContents += componentDidMountJs + "\n";
+MainLayoutContents += "    }\n";
+MainLayoutContents += "    render() {\n";
 MainLayoutContents += "    return (\n";
 MainLayoutContents += "        <div>\n";
 if (HeaderContents !== undefined)
@@ -790,6 +794,7 @@ MainLayoutContents += "        </div>\n";
 
 MainLayoutContents += "    );\n";
 
+MainLayoutContents += "}\n";
 MainLayoutContents += "}\n";
 
 if (fs.existsSync(layoutsFolder + "/Main.jsx"))
@@ -942,9 +947,12 @@ execute("yarn create vite vite --template react", function (output)
             execute("cd vite && yarn build", function (success)
             {
                 buildLoader.succeed("Built");
+
+                // Remove "jsx" folder
+                fs.rmSync("./jsx", { recursive: true });
+
                 console.log("Done!");
             });
         });
-
     });
 });

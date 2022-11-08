@@ -10,6 +10,7 @@ clean:
 	rm template/migration.js || true
 	rm template/install.sh || true
 	rm -rf template/vite || true
+	rm -rf template/jsx || true
 	rm -rf template/node_modules || true
 	rm -rf template/node_modules.bak || true
 	cp template/package.json.bak template/package.json || true
