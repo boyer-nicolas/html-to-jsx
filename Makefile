@@ -1,8 +1,8 @@
 test:
-	cp migration.js ./template/migration.js
 	cp install.sh ./template/install.sh
 	chmod +x ./template/install.sh
 	cd template && ./install.sh
+	cp migration.js ./template/migration.js
 	cd template && node ./migration.js class
 	(cd template/vite && yarn dev)
 

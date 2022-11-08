@@ -1,6 +1,6 @@
 // Read script params
-import HTMLtoJSX from 'htmltojsx';
 import prettier from 'prettier';
+import HTMLtoJSX from 'htmltojsx';
 import fs from 'fs';
 import { exec } from 'child_process';
 import ora from 'ora';
@@ -8,7 +8,6 @@ import chalk from 'chalk';
 import { exit } from 'process';
 import HTMLParser from 'node-html-parser';
 import fse from 'fs-extra';
-
 const viteFolder = "./vite";
 const processName = process.argv[2];
 const conversionFolder = "./jsx";
@@ -589,9 +588,9 @@ function handleFile(html, logPrefix, name, findComponents)
         }
     });
 
-    // Convert to JSX
     const jsxConversionLoader = load(logPrefix + " - Converting to JSX");
 
+    // Convert to JSX
     var converter = new HTMLtoJSX({
         createClass: false
     });
