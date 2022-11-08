@@ -7,11 +7,12 @@ test:
 	(cd template/vite && yarn dev)
 
 clean:
-	rm template/migration.js
-	rm template/install.sh
-	rm -rf template/node_modules
-	rm -rf template/node_modules.bak
-	cp template/package.json.bak template/package.json
-	cp template/package-lock.json.bak template/package-lock.json
-	rm template/package.json.bak
-	rm template/package-lock.json.bak
+	rm template/migration.js || true
+	rm template/install.sh || true
+	rm -rf template/vite || true
+	rm -rf template/node_modules || true
+	rm -rf template/node_modules.bak || true
+	cp template/package.json.bak template/package.json || true
+	cp template/package-lock.json.bak template/package-lock.json || true
+	rm template/package.json.bak || true
+	rm template/package-lock.json.bak || true
