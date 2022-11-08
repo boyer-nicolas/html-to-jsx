@@ -352,14 +352,6 @@ function handleFile(html, logPrefix, name, findComponents)
 
                     fileName = fileName + "Img";
 
-                    // Make sure file name is unique
-                    let i = 1;
-                    while (imports.includes(fileName))
-                    {
-                        fileName += i;
-                        i++;
-                    }
-
                     const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
                     imports.push(fullImport);
 
