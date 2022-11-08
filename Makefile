@@ -4,6 +4,7 @@ test:
 	chmod +x ./template/install.sh
 	cd template && ./install.sh
 	cd template && node ./migration.js class
+	(cd template/vite && yarn dev)
 
 clean:
 	rm template/migration.js
