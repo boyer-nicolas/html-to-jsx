@@ -288,93 +288,92 @@ function handleFile(html, logPrefix, name, findComponents)
     const imgTags = root.querySelectorAll("img");
     imgTags.forEach(imgTag =>
     {
-        if (!imgTag.rawAttrs.endsWith("/"))
+        let importImgLoader = load(logPrefix + " - Importing and converting img tag");
+        const imgSrc = imgTag.getAttribute("src");
+        if (imgSrc !== null)
         {
-            let unclosedImgLoader = load(logPrefix + " - Fixing unclosed img tag");
-            imgTag.rawAttrs += "/";
-            unclosedImgLoader.succeed(logPrefix + " - Fixed unclosed img tag");
-
-            let importImgLoader = load(logPrefix + " - Importing and converting img tag");
-            const imgSrc = imgTag.getAttribute("src");
-            if (imgSrc !== null)
+            if (fs.existsSync(imgSrc))
             {
-                if (fs.existsSync(imgSrc))
+                // Create img folder if it doesn't exist
+                const imgFolder = assetsFolder + "/img";
+                let imgDest;
+
+                if (imgSrc.startsWith("/"))
                 {
-                    // Create img folder if it doesn't exist
-                    const imgFolder = assetsFolder + "/img";
-                    let imgDest;
-
-                    if (imgSrc.startsWith("/"))
-                    {
-                        imgDest = imgSrc.substring(1);
-                    }
-
-                    if (!fs.existsSync(imgFolder))
-                    {
-                        fs.mkdirSync(imgFolder);
-                    }
-
-                    if (imgSrc.includes("img/") || imgSrc.includes("images/"))
-                    {
-                        // Strip img/ or images/ from path
-                        imgDest = imgSrc.replace("img/", "");
-                        imgDest = imgSrc.replace("images/", "");
-                    }
-
-                    // If image source contains folders, create them 
-                    const imgSrcFolders = imgDest.split("/");
-                    if (imgSrcFolders.length > 1)
-                    {
-                        let folderPath = imgFolder;
-                        for (let i = 0; i < imgSrcFolders.length - 1; i++)
-                        {
-                            folderPath += "/" + imgSrcFolders[i];
-                            if (!fs.existsSync(folderPath))
-                            {
-                                fs.mkdirSync(folderPath);
-                            }
-                        }
-                    }
-
-                    fs.copyFile("./" + imgSrc, imgFolder + "/" + imgDest, (err) =>
-                    {
-                        if (err)
-                        {
-                            throw err;
-                        }
-                    });
-
-                    let fileName = imgSrc.split("/").pop();
-                    fileName = fileName.split(".").shift();
-                    fileName = fileName.replace(/-([a-z])/g, g => g[1].toUpperCase());
-                    // Replace remaining hyphens with underscores
-                    fileName = fileName.replace(/-/g, "_");
-                    // Replace remaining underscores with camel case
-                    fileName = fileName.replace(/_([a-z])/g, g => g[1].toUpperCase());
-                    fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
-
-                    fileName = fileName + "Img";
-
-                    // If image is in a folder, add folder name to file name
-                    if (imgSrcFolders.length > 1)
-                    {
-                        fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
-                    }
-
-                    fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
-
-                    const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
-
-                    if (!imports.includes(fullImport))
-                    {
-                        imports.push(fullImport);
-                    }
-
-                    const jsxImgSrc = "{" + fileName + "}";
-                    imgTag.setAttribute("src", jsxImgSrc);
-
-                    importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
+                    imgDest = imgSrc.substring(1);
                 }
+
+                if (!fs.existsSync(imgFolder))
+                {
+                    fs.mkdirSync(imgFolder);
+                }
+
+                if (imgSrc.includes("img/") || imgSrc.includes("images/"))
+                {
+                    // Strip img/ or images/ from path
+                    imgDest = imgSrc.replace("img/", "");
+                    imgDest = imgSrc.replace("images/", "");
+                }
+
+                // If image source contains folders, create them 
+                const imgSrcFolders = imgDest.split("/");
+                if (imgSrcFolders.length > 1)
+                {
+                    let folderPath = imgFolder;
+                    for (let i = 0; i < imgSrcFolders.length - 1; i++)
+                    {
+                        folderPath += "/" + imgSrcFolders[i];
+                        if (!fs.existsSync(folderPath))
+                        {
+                            fs.mkdirSync(folderPath);
+                        }
+                    }
+                }
+
+                fs.copyFile("./" + imgSrc, imgFolder + "/" + imgDest, (err) =>
+                {
+                    if (err)
+                    {
+                        throw err;
+                    }
+                });
+
+                let fileName = imgSrc.split("/").pop();
+                fileName = fileName.split(".").shift();
+                fileName = fileName.replace(/-([a-z])/g, g => g[1].toUpperCase());
+                // Replace remaining hyphens with underscores
+                fileName = fileName.replace(/-/g, "_");
+                // Replace remaining underscores with camel case
+                fileName = fileName.replace(/_([a-z])/g, g => g[1].toUpperCase());
+                fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+
+                fileName = fileName + "Img";
+
+                // If image is in a folder, add folder name to file name
+                if (imgSrcFolders.length > 1)
+                {
+                    fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
+                }
+
+                fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+
+                const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
+
+                if (!imports.includes(fullImport))
+                {
+                    imports.push(fullImport);
+                }
+
+                const jsxImgSrc = "{" + fileName + "}";
+                imgTag.setAttribute("src", jsxImgSrc);
+
+                importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
+            }
+            if (!imgTag.rawAttrs.endsWith("/"))
+            {
+                let unclosedImgLoader = load(logPrefix + " - Fixing unclosed img tag");
+                imgTag.rawAttrs += "/";
+                unclosedImgLoader.succeed(logPrefix + " - Fixed unclosed img tag");
             }
         }
     });
@@ -460,6 +459,30 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     jsConvertLoader.succeed(logPrefix + " - Converted js link to import");
+
+    const inlineJsConvertLoader = load(logPrefix + " - Converting inline js to componentDidMount");
+    const inlineJsTags = root.querySelectorAll("script:not([src])");
+    for (let i = 0; i < inlineJsTags.length; i++)
+    {
+        const inlineJsTag = inlineJsTags[i];
+        const fileContents = inlineJsTag.innerHTML;
+        componentDidMountJs = fileContents;
+        inlineJsTag.remove();
+    }
+
+    inlineJsConvertLoader.succeed(logPrefix + " - Converted inline js to componentDidMount");
+
+    const inlineCssConvertLoader = load(logPrefix + " - Converting inline css to componentDidMount");
+    const inlineCssTags = root.querySelectorAll("style");
+    for (let i = 0; i < inlineCssTags.length; i++)
+    {
+        const inlineCssTag = inlineCssTags[i];
+        const fileContents = inlineCssTag.innerHTML;
+        componentDidMountCss = fileContents;
+        inlineCssTag.remove();
+    }
+
+    inlineCssConvertLoader.succeed(logPrefix + " - Converted inline css to componentDidMount");
 
     // Detect wow.js from class
     const lookforWow = load(logPrefix + " - Detecting wow.js from class");
@@ -590,18 +613,30 @@ function handleFile(html, logPrefix, name, findComponents)
 
     const jsxConversionLoader = load(logPrefix + " - Converting to JSX");
 
-    // Convert to JSX
-    var converter = new HTMLtoJSX({
-        createClass: false
-    });
+    // // Convert to JSX
+    // var converter = new HTMLtoJSX({
+    //     createClass: false
+    // });
 
-    var jsx = converter.convert(root.toString());
+    // var jsx = converter.convert(root.toString());
 
-    var JSXFunctionEnd = createFunctionEnd();
+    let body = root.querySelector("body");
 
-    const importsToString = imports.join("");
+    if (body)
+    {
+        body = body.innerHTML;
+    }
+    else
+    {
+        // Get first node
+        body = root.childNodes[0].innerHTML;
+    }
 
-    jsx = importsToString + JSXFunctionStart + jsx + JSXFunctionEnd;
+    var jsx = body.toString();
+    jsx = jsx.replace(/class=/g, "className=");
+    jsx = jsx.replace(/for=/g, "htmlFor=");
+    // Convert hyphenated attributes to camelCase (except for aria- and data-)
+    jsx = jsx.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase().replace(/-([a-z])/g, function (g) { return g[1].toUpperCase(); });
 
     // Replace reactwow with ReactWOW
     jsx = jsx.replace(/reactwow/g, "ReactWOW");
@@ -643,7 +678,20 @@ function handleFile(html, logPrefix, name, findComponents)
     // Remove quotes arround img src object
     jsx = jsx.replace(/src="(\{.*\})"/g, "src=$1");
 
+    // Make first letter of img src object uppercase
+    jsx = jsx.replace(/src={(\w)/g, "src={$1");
+
+    // Wrap in div
+    jsx = "<div>" + jsx + "</div>";
+
+    var JSXFunctionEnd = createFunctionEnd();
+
+    const importsToString = imports.join("");
+
+    jsx = importsToString + JSXFunctionStart + jsx + JSXFunctionEnd;
+
     jsxConversionLoader.succeed(logPrefix + " - Converted to JSX");
+
     return jsx;
 }
 
@@ -678,19 +726,19 @@ fs.readdirSync("./").forEach(file =>
 
         jsxFolderLoader.succeed(logPrefix + " - Found JSX folder");
 
-        const formatLoader = load(logPrefix + " - Formatting");
-        // Format JSX
-        var formattedJSX = prettier.format(jsx, {
-            semi: false,
-            singleQuote: true,
-            parser: "babel"
-        });
+        // const formatLoader = load(logPrefix + " - Formatting");
+        // // Format JSX
+        // var formattedJSX = prettier.format(jsx, {
+        //     semi: false,
+        //     singleQuote: true,
+        //     parser: "babel"
+        // });
 
-        formatLoader.succeed(logPrefix + " - Formatted");
+        // formatLoader.succeed(logPrefix + " - Formatted");
 
         const createFileLoader = load(logPrefix + " - Creating file");
         // Create new 
-        fs.appendFileSync(pagesFolder + "/" + functionName + ".jsx", formattedJSX);
+        fs.appendFileSync(pagesFolder + "/" + functionName + ".jsx", jsx);
 
         createFileLoader.succeed(logPrefix + " - Converted to " + pagesFolder + functionName + ".jsx");
     }
@@ -722,19 +770,19 @@ function handleComponent(name, contents)
 
         const jsx = handleFile(contents, logPrefix, "" + name, false);
 
-        const formatLoader = load(logPrefix + " - Formatting");
-        // Format JSX
-        var formattedJSX = prettier.format(jsx, {
-            semi: false,
-            singleQuote: true,
-            parser: "babel"
-        });
+        // const formatLoader = load(logPrefix + " - Formatting");
+        // // Format JSX
+        // var formattedJSX = prettier.format(jsx, {
+        //     semi: false,
+        //     singleQuote: true,
+        //     parser: "babel"
+        // });
 
-        formatLoader.succeed(logPrefix + " - Formatted");
+        // formatLoader.succeed(logPrefix + " - Formatted");
 
         const createFileLoader = load(logPrefix + " - Creating file");
         // Create new 
-        fs.appendFileSync(componentsFolder + "/" + name + ".jsx", formattedJSX);
+        fs.appendFileSync(componentsFolder + "/" + name + ".jsx", jsx);
 
         createFileLoader.succeed(logPrefix + " - Converted to ./jsx/" + "Components/" + name + ".jsx");
 
