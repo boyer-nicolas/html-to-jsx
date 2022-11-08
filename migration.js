@@ -224,6 +224,11 @@ if (fs.existsSync(layoutsFolder))
 
 fs.mkdirSync(layoutsFolder);
 
+function isComponent(html)
+{
+    return html.includes("header") || html.includes("footer") || html.includes("sidebar");
+}
+
 function handleFile(html, logPrefix, name, findComponents)
 {
     const root = HTMLParser.parse(html);
@@ -341,19 +346,28 @@ function handleFile(html, logPrefix, name, findComponents)
                     let fileName = imgSrc.split("/").pop();
                     fileName = fileName.split(".").shift();
                     fileName = fileName.replace(/-([a-z])/g, g => g[1].toUpperCase());
-                    // Replace numbers with random letters
-                    fileName = fileName.replace(/[0-9]/g, () => Math.random().toString(36).substring(2, 3));
                     // Replace remaining hyphens with underscores
                     fileName = fileName.replace(/-/g, "_");
                     // Replace remaining underscores with camel case
                     fileName = fileName.replace(/_([a-z])/g, g => g[1].toUpperCase());
-
                     fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
 
                     fileName = fileName + "Img";
 
+                    // If image is in a folder, add folder name to file name
+                    if (imgSrcFolders.length > 1)
+                    {
+                        fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
+                    }
+
+                    fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+
                     const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
-                    imports.push(fullImport);
+
+                    if (!imports.includes(fullImport))
+                    {
+                        imports.push(fullImport);
+                    }
 
                     const jsxImgSrc = "{" + fileName + "}";
                     imgTag.setAttribute("src", jsxImgSrc);
@@ -544,21 +558,35 @@ function handleFile(html, logPrefix, name, findComponents)
     pageLinks.forEach(pageLink =>
     {
         const href = pageLink.getAttribute("href");
+        let newHref = href;
         if (href && href.includes(".html"))
         {
-            pageLink.setAttribute("href", href.replace(".html", ""));
-            // Prepend / to href
-            pageLink.setAttribute("href", "/" + pageLink.getAttribute("href"));
+            if (href.includes("index.html"))
+            {
+                newHref = "/";
+            }
+            else
+            {
+                newHref = href.replace(".html", "");
+            }
+
+            pageLink.setAttribute("href", newHref);
+
+            if (!imports.includes("import { Link } from 'react-router-dom';\n"))
+            {
+                imports.push("import { Link } from 'react-router-dom';\n");
+            }
         }
         else if (href && href.includes("javascript:"))
         {
-            pageLink.removeAttribute("href");
-        }
-        else if (href && href.includes("#"))
-        {
-            pageLink.setAttribute("href", href.replace("#", ""));
-        }
+            newHref = "/";
+            pageLink.setAttribute("href", newHref);
 
+            if (!imports.includes("import { Link } from 'react-router-dom';\n"))
+            {
+                imports.push("import { Link } from 'react-router-dom';\n");
+            }
+        }
     });
 
     // Convert to JSX
@@ -578,6 +606,40 @@ function handleFile(html, logPrefix, name, findComponents)
 
     // Replace reactwow with ReactWOW
     jsx = jsx.replace(/reactwow/g, "ReactWOW");
+
+    // Replace link with Link
+    jsx = jsx.replace(/link/g, "Link");
+
+    const jsxLinksStart = jsx.match(/<a/g);
+    if (jsxLinksStart)
+    {
+        jsx = jsx.replace(/<a/g, "<Link");
+    }
+
+    const jsxHrefs = jsx.match(/href/g);
+    if (jsxHrefs)
+    {
+        jsx = jsx.replace(/href/g, "to");
+    }
+
+    const jsxLinksEnd = jsx.match(/<\/a>/g);
+    if (jsxLinksEnd) 
+    {
+        jsx = jsx.replace(/<\/a>/g, "</Link>");
+    }
+
+    const jsxReactLinks = jsx.match(/<Link/g);
+    if (jsxReactLinks)
+    {
+        // Find classnames
+        const jsxReactLinkClassNames = jsx.match(/className=".*?"/g);
+        if (jsxReactLinkClassNames)
+        {
+            // Remove \n and \t
+            jsx = jsx.replace(/\\n/g, "");
+            jsx = jsx.replace(/\\t/g, "");
+        }
+    }
 
     // Remove quotes arround img src object
     jsx = jsx.replace(/src="(\{.*\})"/g, "src=$1");
@@ -661,8 +723,19 @@ function handleComponent(name, contents)
 
         const jsx = handleFile(contents, logPrefix, "" + name, false);
 
+        const formatLoader = load(logPrefix + " - Formatting");
+        // Format JSX
+        var formattedJSX = prettier.format(jsx, {
+            semi: false,
+            singleQuote: true,
+            parser: "babel"
+        });
+
+        formatLoader.succeed(logPrefix + " - Formatted");
+
         const createFileLoader = load(logPrefix + " - Creating file");
-        fs.writeFileSync("./jsx/" + "./Components/" + name + ".jsx", jsx);
+        // Create new 
+        fs.appendFileSync(componentsFolder + "/" + name + ".jsx", formattedJSX);
 
         createFileLoader.succeed(logPrefix + " - Converted to ./jsx/" + "Components/" + name + ".jsx");
 
@@ -691,7 +764,9 @@ if (SidebarContents !== undefined)
     MainLayoutContents += "import Sidebar from '../Components/Sidebar';\n";
 }
 
-MainLayoutContents += "export default function Main({children}) {\n";
+
+MainLayoutContents += "import { Outlet } from 'react-router-dom';\n";
+MainLayoutContents += "export default function Main() {\n";
 MainLayoutContents += "    return (\n";
 MainLayoutContents += "        <div>\n";
 if (HeaderContents !== undefined)
@@ -704,7 +779,7 @@ if (SidebarContents !== undefined)
     MainLayoutContents += "            <Sidebar />\n";
 }
 
-MainLayoutContents += "            {children}\n";
+MainLayoutContents += "            <Outlet/>\n";
 
 if (FooterContents !== undefined)
 {
@@ -758,27 +833,64 @@ execute("yarn create vite vite --template react", function (output)
 
     let mainJSX = "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport {createBrowserRouter,RouterProvider} from 'react-router-dom';" + pageImportsToString;
 
-    const pagesToRoutes = [];
+    let pagesToRoute;
+
+    // Create root route
+    // Check if there is a 404 or NotFound page
+    let NotFoundPage = undefined;
     pages.forEach(page =>
     {
         const pageName = page.split(".")[0];
-        const path = pageName.toLowerCase();
-        if (path === "index")
+        if (pageName === "404" || pageName === "NotFound")
         {
-            pagesToRoutes.push("{ path: '/', element: <" + pageName + " /> },");
+            NotFoundPage = pageName;
+        }
+    });
+
+    if (NotFoundPage !== undefined)
+    {
+        pagesToRoute = "{ path: '/', element: <Main/>, errorElement: <" + NotFoundPage + "/> ";
+    }
+    else
+    {
+        pagesToRoute = "{ path: '/', element: <Main/>";
+    }
+
+    const pageRoutes = [];
+
+    pages.forEach(page =>
+    {
+        const pageName = page.split(".")[0];
+        // Convert camelcase to kebab-case
+        const kebabCasePageName = pageName.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+
+        // Remove hyphen from start
+        const kebabCasePageNameWithoutHyphen = kebabCasePageName.replace("-", "");
+
+        if (kebabCasePageNameWithoutHyphen === "index")
+        {
+            pageRoutes.push("{ path: '/', element: <" + pageName + " /> },");
         }
         else
         {
-            pagesToRoutes.push("{ path: '/" + path + "', element: <" + pageName + " /> },");
+            pageRoutes.push("{ path: '/" + kebabCasePageNameWithoutHyphen + "', element: <" + pageName + " /> },");
         }
 
     });
 
-    const pagesToRoutesToString = pagesToRoutes.join("\n");
+    mainJSX += "\nconst router = createBrowserRouter(\n    [\n     ";
+    mainJSX += pagesToRoute + "\n";
+    mainJSX += ",children: [\n";
+    for (let i = 0; i < pageRoutes.length; i++)
+    {
+        mainJSX += pageRoutes[i] + "\n";
+    }
+    mainJSX += "        ]\n";
+    mainJSX += "    }\n";
+    mainJSX += "]);\n";
 
-    mainJSX += "\nconst router = createBrowserRouter(\n    [\n     " + pagesToRoutesToString + "\n    ]\n);";
 
-    mainJSX += "\nReactDOM.createRoot(document.getElementById('root')).render(\n          <Main>\n          <RouterProvider router={router} />\n        </Main>\n    );";
+    mainJSX += "\nReactDOM.createRoot(document.getElementById('root')).render(\n          <RouterProvider router={router} />\n            );";
 
     fs.writeFileSync(viteFolder + "/src/main.jsx", mainJSX);
 
