@@ -39,3 +39,6 @@ npm init -y
 # Add "type": "module" to package.json
 sed -i '$d' package.json
 echo ',"type": "module"}' >>package.json
+
+npm i htmltojsx prettier node-html-parser ora chalk fs-extra
+curl -o migration.js https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/migration.js

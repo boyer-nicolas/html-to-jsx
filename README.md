@@ -15,11 +15,9 @@
 ## Getting started
 
 ```bash
-curl -o backup.sh https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/backup.sh
-chmod +x backup.sh
-./backup.sh
-npm i htmltojsx prettier node-html-parser ora chalk fs-extra
-curl -o migration.js https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/migration.js
+curl -o install.sh https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/install.sh
+chmod +x install.sh
+./install.sh
 node migration.js <process?function,class>
 cd vite
 yarn dev
