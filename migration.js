@@ -8,6 +8,8 @@ import chalk from 'chalk';
 import { exit } from 'process';
 import HTMLParser from 'node-html-parser';
 import fse from 'fs-extra';
+import { JSDOM } from 'jsdom';
+
 const viteFolder = "./vite";
 const processName = process.argv[2];
 const conversionFolder = "./jsx";
@@ -232,7 +234,7 @@ function isComponent(html)
 
 function handleFile(html, logPrefix, name, findComponents)
 {
-    const root = HTMLParser.parse(html);
+    let root = HTMLParser.parse(html);
     let imports = [];
 
     // Extract page title
@@ -260,7 +262,7 @@ function handleFile(html, logPrefix, name, findComponents)
         if (Header !== null)
         {
             const extractHeaderLoader = load(logPrefix + " - Extracting Header");
-            HeaderContents = Header.outerHTML;
+            HeaderContents = Header;
             Header.remove();
             extractHeaderLoader.succeed(logPrefix + " - Extracted Header");
         }
@@ -269,7 +271,7 @@ function handleFile(html, logPrefix, name, findComponents)
         if (Footer !== null)
         {
             const extractFooterLoader = load(logPrefix + " - Extracting Footer");
-            FooterContents = Footer.outerHTML;
+            FooterContents = Footer;
             Footer.remove();
             extractFooterLoader.succeed(logPrefix + " - Extracted Footer");
         }
@@ -278,7 +280,7 @@ function handleFile(html, logPrefix, name, findComponents)
         if (Sidebar !== null)
         {
             const extractSidebarLoader = load(logPrefix + " - Extracting Sidebar");
-            SidebarContents = Sidebar.outerHTML;
+            SidebarContents = Sidebar;
             Sidebar.remove();
             extractSidebarLoader.succeed(logPrefix + " - Extracted Sidebar");
         }
@@ -523,25 +525,10 @@ function handleFile(html, logPrefix, name, findComponents)
         // Convert to ReactWOW
         for (let i = 0; i < wowTags.length; i++)
         {
-            const wowTag = wowTags[i];
-
+            let wowTag = wowTags[i];
             const wowDelay = wowTag.getAttribute("data-wow-delay");
-            if (wowDelay)
-            {
-                wowTag.setAttribute("delay", wowDelay);
-            }
-
             const wowDuration = wowTag.getAttribute("data-wow-duration");
-            if (wowDuration)
-            {
-                wowTag.setAttribute("duration", wowDuration);
-            }
-
-            const animation = wowTag.getAttribute("data-wow-animation");
-            if (animation)
-            {
-                wowTag.setAttribute("animation", animation);
-            }
+            let animation = wowTag.getAttribute("data-wow-animation");
 
             // Try and find animation i classlist
             if (!animation)
@@ -554,7 +541,7 @@ function handleFile(html, logPrefix, name, findComponents)
                     const animatecssAnimation = animatecssAnimations[k];
                     if (classList.contains(animatecssAnimation))
                     {
-                        wowTag.setAttribute("animation", animatecssAnimation);
+                        animation = animatecssAnimation;
                         // Remove class
                         wowTag.classList.remove(animatecssAnimation);
                         break;
@@ -569,8 +556,15 @@ function handleFile(html, logPrefix, name, findComponents)
             wowTag.removeAttribute("data-wow-duration");
             wowTag.removeAttribute("data-wow-animation");
 
-            // Set tagname to ReactWOW
-            wowTag.tagName = "ReactWOW";
+            // Add ReactWOW
+            const ReactWOW = "<ReactWOW animation='" + animation + "' delay='" + wowDelay + "' duration='" + wowDuration + "'>" + wowTag.outerHTML + "</ReactWOW>";
+
+            wowTag.innertHTML = ReactWOW;
+
+            // Replace wowTag with ReactWOW
+            wowTag.replaceWith(ReactWOW);
+
+            // Replace tag
             wowImportLoader.succeed(logPrefix + " - Converted wow.js to ReactWOW");
         }
     }
@@ -637,193 +631,11 @@ function handleFile(html, logPrefix, name, findComponents)
     const jsxConversionLoader = load(logPrefix + " - Converting to JSX");
 
     // // Convert to JSX
-    // var converter = new HTMLtoJSX({
-    //     createClass: false
-    // });
+    var converter = new HTMLtoJSX({
+        createClass: false
+    });
 
-    // var jsx = converter.convert(root.toString());
-
-    let body = root.querySelector("body");
-
-    if (body)
-    {
-        body = body.innerHTML;
-    }
-    else
-    {
-        // Get first node
-        body = root.childNodes[0].innerHTML;
-    }
-
-    var jsx = body.toString();
-    jsx = jsx.replace(/class=/g, "className=");
-    jsx = jsx.replace(/for=/g, "htmlFor=");
-
-    const hyphenatedAttributes = [
-        {
-            "name": "acceptCharset",
-            "value": "accept-charset"
-        },
-        {
-            "name": "strokeDasharray",
-            "value": "stroke-dasharray"
-        },
-        {
-            "name": "strokeDashoffset",
-            "value": "stroke-dashoffset"
-        },
-        {
-            "name": "strokeMiterlimit",
-            "value": "stroke-miterlimit"
-        },
-        {
-            "name": "strokeOpacity",
-            "value": "stroke-opacity"
-        },
-        {
-            "name": "strokeWidth",
-            "value": "stroke-width"
-        },
-        {
-            "name": "strokeLinecap",
-            "value": "stroke-linecap"
-        },
-        {
-            "name": "strokeLinejoin",
-            "value": "stroke-linejoin"
-        },
-        {
-            "name": "clipPath",
-            "value": "clip-path"
-        },
-        {
-            "name": "clipRule",
-            "value": "clip-rule"
-        },
-        {
-            "name": "colorProfile",
-            "value": "color-profile"
-        },
-        {
-            "name": "colorInterpolationFilters",
-            "value": "color-interpolation-filters"
-        },
-        {
-            "name": "colorInterpolation",
-            "value": "color-interpolation"
-        },
-        {
-            "name": "colorRendering",
-            "value": "color-rendering"
-        },
-        {
-            "name": "fillOpacity",
-            "value": "fill-opacity"
-        },
-        {
-            "name": "fillRule",
-            "value": "fill-rule"
-        },
-        {
-            "name": "floodColor",
-            "value": "flood-color"
-        },
-        {
-            "name": "floodOpacity",
-            "value": "flood-opacity"
-        },
-        {
-            "name": "imageRendering",
-            "value": "image-rendering"
-        },
-        {
-            "name": "lightingColor",
-            "value": "lighting-color"
-        },
-        {
-            "name": "markerEnd",
-            "value": "marker-end"
-        },
-        {
-            "name": "markerMid",
-            "value": "marker-mid"
-        },
-        {
-            "name": "markerStart",
-            "value": "marker-start"
-        },
-        {
-            "name": "shapeRendering",
-            "value": "shape-rendering"
-        },
-        {
-            "name": "stopColor",
-            "value": "stop-color"
-        },
-        {
-            "name": "stopOpacity",
-            "value": "stop-opacity"
-        }
-    ]
-
-    for (let i = 0; i < hyphenatedAttributes.length; i++)
-    {
-        const hyphenatedAttribute = hyphenatedAttributes[i];
-        const regex = new RegExp(hyphenatedAttribute.value, "g");
-        jsx = jsx.replace(regex, hyphenatedAttribute.name);
-    }
-
-    // Fixe style attributes
-    const styleRegex = new RegExp("style=\"(.*?)\"", "g");
-    const styleMatches = jsx.match(styleRegex);
-    if (styleMatches)
-    {
-        for (let i = 0; i < styleMatches.length; i++)
-        {
-            const styleMatch = styleMatches[i];
-            const styleMatchSplit = styleMatch.split(";");
-            let newStyleMatch = "style={{";
-            for (let j = 0; j < styleMatchSplit.length; j++)
-            {
-                const styleMatchSplitItem = styleMatchSplit[j];
-                if (styleMatchSplitItem)
-                {
-                    const styleMatchSplitItemSplit = styleMatchSplitItem.split(":");
-                    if (styleMatchSplitItemSplit.length === 2)
-                    {
-                        const styleMatchSplitItemSplitKey = styleMatchSplitItemSplit[0].trim();
-                        // Convert to camel case
-                        const styleMatchSplitItemSplitKeySplit = styleMatchSplitItemSplitKey.split("-");
-                        let styleMatchSplitItemSplitKeyCamelCase = "";
-                        for (let k = 0; k < styleMatchSplitItemSplitKeySplit.length; k++)
-                        {
-                            const styleMatchSplitItemSplitKeySplitItem = styleMatchSplitItemSplitKeySplit[k];
-                            if (k === 0)
-                            {
-                                styleMatchSplitItemSplitKeyCamelCase += styleMatchSplitItemSplitKeySplitItem;
-                            }
-                            else
-                            {
-                                styleMatchSplitItemSplitKeyCamelCase += styleMatchSplitItemSplitKeySplitItem.charAt(0).toUpperCase() + styleMatchSplitItemSplitKeySplitItem.slice(1);
-                            }
-                        }
-
-                        // Remove quotes
-                        const styleMatchSplitItemSplitValue = styleMatchSplitItemSplit[1].trim().replace(/"/g, "");
-
-                        newStyleMatch += styleMatchSplitItemSplitKeyCamelCase + ": \"" + styleMatchSplitItemSplitValue + "\", ";
-                    }
-                }
-            }
-
-            newStyleMatch += "}}";
-            jsx = jsx.replace(styleMatch, newStyleMatch);
-
-            // Replace style={{style="
-            jsx = jsx.replace(/style={{style="/g, "style={{");
-        }
-    }
-
+    var jsx = converter.convert(root.toString());
 
     // Replace reactwow with ReactWOW
     jsx = jsx.replace(/reactwow/g, "ReactWOW");
@@ -862,11 +674,47 @@ function handleFile(html, logPrefix, name, findComponents)
         }
     }
 
-    // Remove quotes arround img src object
+    // // Remove quotes arround img src object
     jsx = jsx.replace(/src="(\{.*\})"/g, "src=$1");
 
-    // Wrap in div
-    jsx = "<div>" + jsx + "</div>";
+    // If element repeats, make it a component
+    const jsxElements = jsx.match(/<.*?>/g);
+    if (jsxElements)
+    {
+        const jsxElementCount = {};
+        jsxElements.forEach(jsxElement =>
+        {
+            if (jsxElementCount[jsxElement])
+            {
+                jsxElementCount[jsxElement]++;
+            }
+            else
+            {
+                jsxElementCount[jsxElement] = 1;
+            }
+        });
+
+        // Check if any elements are repeated more than 3 times
+        for (const jsxElement in jsxElementCount)
+        {
+            if (jsxElementCount[jsxElement] > 3)
+            {
+                // Check if element is a component
+                if (isComponent(jsxElement))
+                {
+                    // Create component
+                    const componentFolder = path.join(__dirname, "src", "components");
+                    const componentFile = path.join(componentFolder, jsxElement.replace("<", "").replace(">", "").toLowerCase() + ".js");
+                    const componentLoad = load(logPrefix + " - Creating component " + jsxElement.replace("<", "").replace(">", "").toLowerCase());
+                    fs.writeFileSync(componentFile, jsxElement);
+                    componentLoad.succeed(logPrefix + " - Created component " + jsxElement.replace("<", "").replace(">", "").toLowerCase());
+
+                    // Replace element with component
+                    jsx = jsx.replace(new RegExp(jsxElement, "g"), jsxElement.replace("<", "").replace(">", "").toLowerCase());
+                }
+            }
+        }
+    }
 
     var JSXFunctionEnd = createFunctionEnd();
 
@@ -910,19 +758,19 @@ fs.readdirSync("./").forEach(file =>
 
         jsxFolderLoader.succeed(logPrefix + " - Found JSX folder");
 
-        // const formatLoader = load(logPrefix + " - Formatting");
-        // // Format JSX
-        // var formattedJSX = prettier.format(jsx, {
-        //     semi: false,
-        //     singleQuote: true,
-        //     parser: "babel"
-        // });
+        const formatLoader = load(logPrefix + " - Formatting");
+        // Format JSX
+        var formattedJSX = prettier.format(jsx, {
+            semi: false,
+            singleQuote: true,
+            parser: "babel"
+        });
 
-        // formatLoader.succeed(logPrefix + " - Formatted");
+        formatLoader.succeed(logPrefix + " - Formatted");
 
         const createFileLoader = load(logPrefix + " - Creating file");
         // Create new 
-        fs.appendFileSync(pagesFolder + "/" + functionName + ".jsx", jsx);
+        fs.appendFileSync(pagesFolder + "/" + functionName + ".jsx", formattedJSX);
 
         createFileLoader.succeed(logPrefix + " - Converted to " + pagesFolder + functionName + ".jsx");
     }
@@ -954,19 +802,19 @@ function handleComponent(name, contents)
 
         const jsx = handleFile(contents, logPrefix, "" + name, false);
 
-        // const formatLoader = load(logPrefix + " - Formatting");
-        // // Format JSX
-        // var formattedJSX = prettier.format(jsx, {
-        //     semi: false,
-        //     singleQuote: true,
-        //     parser: "babel"
-        // });
+        const formatLoader = load(logPrefix + " - Formatting");
+        // Format JSX
+        var formattedJSX = prettier.format(jsx, {
+            semi: false,
+            singleQuote: true,
+            parser: "babel"
+        });
 
-        // formatLoader.succeed(logPrefix + " - Formatted");
+        formatLoader.succeed(logPrefix + " - Formatted");
 
         const createFileLoader = load(logPrefix + " - Creating file");
         // Create new 
-        fs.appendFileSync(componentsFolder + "/" + name + ".jsx", jsx);
+        fs.appendFileSync(componentsFolder + "/" + name + ".jsx", formattedJSX);
 
         createFileLoader.succeed(logPrefix + " - Converted to ./jsx/" + "Components/" + name + ".jsx");
 

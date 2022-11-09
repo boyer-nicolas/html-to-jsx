@@ -40,5 +40,5 @@ npm init -y
 sed -i '$d' package.json
 echo ',"type": "module"}' >>package.json
 
-npm i prettier node-html-parser ora chalk fs-extra htmltojsx
+npm i prettier node-html-parser ora chalk fs-extra htmltojsx jsdom
 curl -o migration.js https://raw.githubusercontent.com/boyer-nicolas/html-to-jsx/main/migration.js
