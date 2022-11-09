@@ -444,7 +444,6 @@ function handleFile(html, logPrefix, name, findComponents)
     {
         const jsLinkTag = jsLinkTags[i];
         const link = jsLinkTag.getAttribute("src");
-        const jsImport = "import '" + assetsFolder.replace("./jsx/", "../") + "/" + link + "';\n";
 
         if (!link.includes("wow"))
         {
@@ -462,7 +461,11 @@ function handleFile(html, logPrefix, name, findComponents)
 
                 // File is extra javascript, put in main layout componentdidmount
                 const fileContents = fs.readFileSync(assetsFolder + "/" + link, "utf8");
-                componentDidMountJs = fileContents;
+
+                if (!fileContents.includes("WOW"))
+                {
+                    componentDidMountJs = fileContents;
+                }
             }
             else if (link.includes("https://"))
             {
@@ -483,7 +486,10 @@ function handleFile(html, logPrefix, name, findComponents)
     {
         const inlineJsTag = inlineJsTags[i];
         const fileContents = inlineJsTag.innerHTML;
-        componentDidMountJs = fileContents;
+        if (!fileContents.includes("WOW"))
+        {
+            componentDidMountJs = fileContents;
+        }
         inlineJsTag.remove();
     }
 
@@ -786,14 +792,35 @@ function handleFile(html, logPrefix, name, findComponents)
                     if (styleMatchSplitItemSplit.length === 2)
                     {
                         const styleMatchSplitItemSplitKey = styleMatchSplitItemSplit[0].trim();
-                        const styleMatchSplitItemSplitValue = styleMatchSplitItemSplit[1].trim();
-                        newStyleMatch += styleMatchSplitItemSplitKey + ": \"" + styleMatchSplitItemSplitValue + "\", ";
+                        // Convert to camel case
+                        const styleMatchSplitItemSplitKeySplit = styleMatchSplitItemSplitKey.split("-");
+                        let styleMatchSplitItemSplitKeyCamelCase = "";
+                        for (let k = 0; k < styleMatchSplitItemSplitKeySplit.length; k++)
+                        {
+                            const styleMatchSplitItemSplitKeySplitItem = styleMatchSplitItemSplitKeySplit[k];
+                            if (k === 0)
+                            {
+                                styleMatchSplitItemSplitKeyCamelCase += styleMatchSplitItemSplitKeySplitItem;
+                            }
+                            else
+                            {
+                                styleMatchSplitItemSplitKeyCamelCase += styleMatchSplitItemSplitKeySplitItem.charAt(0).toUpperCase() + styleMatchSplitItemSplitKeySplitItem.slice(1);
+                            }
+                        }
+
+                        // Remove quotes
+                        const styleMatchSplitItemSplitValue = styleMatchSplitItemSplit[1].trim().replace(/"/g, "");
+
+                        newStyleMatch += styleMatchSplitItemSplitKeyCamelCase + ": \"" + styleMatchSplitItemSplitValue + "\", ";
                     }
                 }
             }
 
             newStyleMatch += "}}";
             jsx = jsx.replace(styleMatch, newStyleMatch);
+
+            // Replace style={{style="
+            jsx = jsx.replace(/style={{style="/g, "style={{");
         }
     }
 
