@@ -69,7 +69,8 @@ if (!processName)
     process.exit(1)
 }
 
-let componentDidMountJs;
+let componentDidMountJs = "";
+let componentDidMountPage = "";
 
 log("Starting migration process: " + processName);
 let functionName;
@@ -130,6 +131,16 @@ function createFunctionStart(name, pageTitle)
             JSXFunctionStart += "    document.title = \"" + pageTitle + "\";\n";
         }
 
+        if (componentDidMountPage !== undefined && componentDidMountPage !== null)
+        {
+            if (componentDidMountPage.includes("undefined"))
+            {
+                componentDidMountPage = componentDidMountPage.replace("undefined", "");
+            }
+
+            JSXFunctionStart += componentDidMountPage;
+        }
+
         JSXFunctionStart += "    return (\n";
     }
     else
@@ -141,10 +152,17 @@ function createFunctionStart(name, pageTitle)
         JSXFunctionStart += "        this.props = props;\n";
         JSXFunctionStart += "    }\n\n";
         JSXFunctionStart += "    componentDidMount() {\n";
+
         if (appendTitle === 1)
         {
             JSXFunctionStart += "        document.title = \"" + pageTitle + "\";\n";
         }
+
+        if (componentDidMountPage !== undefined && componentDidMountPage !== null)
+        {
+            JSXFunctionStart += componentDidMountPage;
+        }
+
         JSXFunctionStart += "    }\n\n";
         JSXFunctionStart += "    render() {\n";
         JSXFunctionStart += "    return (\n";
@@ -234,7 +252,36 @@ function isComponent(html)
 
 function handleFile(html, logPrefix, name, findComponents)
 {
-    let root = HTMLParser.parse(html);
+    const root = HTMLParser.parse(html);
+
+    const body = root.querySelector("body");
+    if (body)
+    {
+        const bodyAttrs = body.rawAttrs;
+        const bodyAttrsArray = bodyAttrs.split(" ");
+        for (let i = 0; i < bodyAttrsArray.length; i++)
+        {
+            const attr = bodyAttrsArray[i];
+            if (attr.includes("class="))
+            {
+                const classes = attr.split("=")[1].replace(/"/g, "");
+                const classesArray = classes.split(" ");
+                for (let j = 0; j < classesArray.length; j++)
+                {
+                    const className = classesArray[j];
+                    if (className !== undefined && className !== null && className !== "")
+                    {
+                        const classToAdd = "document.body.classList.add(\"" + className + "\");\n";
+                        if (!componentDidMountPage.includes(classToAdd))
+                        {
+                            componentDidMountPage += classToAdd;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let imports = [];
 
     // Extract page title
