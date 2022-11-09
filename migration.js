@@ -353,9 +353,8 @@ function handleFile(html, logPrefix, name, findComponents)
                 if (imgSrcFolders.length > 1)
                 {
                     fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
+                    fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
                 }
-
-                fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
 
                 const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
 
@@ -677,9 +676,6 @@ function handleFile(html, logPrefix, name, findComponents)
 
     // Remove quotes arround img src object
     jsx = jsx.replace(/src="(\{.*\})"/g, "src=$1");
-
-    // Make first letter of img src object uppercase
-    jsx = jsx.replace(/src={(\w)/g, "src={$1");
 
     // Wrap in div
     jsx = "<div>" + jsx + "</div>";
