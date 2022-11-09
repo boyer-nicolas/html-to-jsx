@@ -409,6 +409,21 @@ function handleFile(html, logPrefix, name, findComponents)
                 fs.mkdirSync(assetsFolder + "/css");
             }
 
+            // IF link contains subfolders, create them
+            const linkFolders = link.split("/");
+            if (linkFolders.length > 1)
+            {
+                let folderPath = assetsFolder + "/css";
+                for (let i = 0; i < linkFolders.length - 1; i++)
+                {
+                    folderPath += "/" + linkFolders[i];
+                    if (!fs.existsSync(folderPath))
+                    {
+                        fs.mkdirSync(folderPath);
+                    }
+                }
+            }
+
             // Copy file to assets folder
             fs.copyFileSync("./" + link, assetsFolder + "/" + link);
         }
