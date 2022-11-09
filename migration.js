@@ -366,13 +366,16 @@ function handleFile(html, logPrefix, name, findComponents)
                 const jsxImgSrc = "{" + fileName + "}";
                 imgTag.setAttribute("src", jsxImgSrc);
 
+                imgTag.setAttribute("alt", imgTag.getAttribute("alt") || fileName);
+
                 importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
-            }
-            if (!imgTag.rawAttrs.endsWith("/"))
-            {
-                let unclosedImgLoader = load(logPrefix + " - Fixing unclosed img tag");
-                imgTag.rawAttrs += "/";
-                unclosedImgLoader.succeed(logPrefix + " - Fixed unclosed img tag");
+
+                if (!imgTag.rawAttrs.endsWith("/"))
+                {
+                    let unclosedImgLoader = load(logPrefix + " - Fixing unclosed img tag");
+                    imgTag.rawAttrs += "/";
+                    unclosedImgLoader.succeed(logPrefix + " - Fixed unclosed img tag");
+                }
             }
         }
     });
@@ -405,6 +408,21 @@ function handleFile(html, logPrefix, name, findComponents)
             if (!fs.existsSync(assetsFolder + "/css"))
             {
                 fs.mkdirSync(assetsFolder + "/css");
+            }
+
+            // IF link contains subfolders, create them
+            const linkFolders = link.split("/");
+            if (linkFolders.length > 1)
+            {
+                let folderPath = assetsFolder + "/css";
+                for (let i = 0; i < linkFolders.length - 1; i++)
+                {
+                    folderPath += "/" + linkFolders[i];
+                    if (!fs.existsSync(folderPath))
+                    {
+                        fs.mkdirSync(folderPath);
+                    }
+                }
             }
 
             // Copy file to assets folder
@@ -634,8 +652,151 @@ function handleFile(html, logPrefix, name, findComponents)
     var jsx = body.toString();
     jsx = jsx.replace(/class=/g, "className=");
     jsx = jsx.replace(/for=/g, "htmlFor=");
-    // Convert hyphenated attributes to camelCase (except for aria- and data-)
-    jsx = jsx.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase().replace(/-([a-z])/g, function (g) { return g[1].toUpperCase(); });
+
+    const hyphenatedAttributes = [
+        {
+            "name": "acceptCharset",
+            "value": "accept-charset"
+        },
+        {
+            "name": "strokeDasharray",
+            "value": "stroke-dasharray"
+        },
+        {
+            "name": "strokeDashoffset",
+            "value": "stroke-dashoffset"
+        },
+        {
+            "name": "strokeMiterlimit",
+            "value": "stroke-miterlimit"
+        },
+        {
+            "name": "strokeOpacity",
+            "value": "stroke-opacity"
+        },
+        {
+            "name": "strokeWidth",
+            "value": "stroke-width"
+        },
+        {
+            "name": "strokeLinecap",
+            "value": "stroke-linecap"
+        },
+        {
+            "name": "strokeLinejoin",
+            "value": "stroke-linejoin"
+        },
+        {
+            "name": "clipPath",
+            "value": "clip-path"
+        },
+        {
+            "name": "clipRule",
+            "value": "clip-rule"
+        },
+        {
+            "name": "colorProfile",
+            "value": "color-profile"
+        },
+        {
+            "name": "colorInterpolationFilters",
+            "value": "color-interpolation-filters"
+        },
+        {
+            "name": "colorInterpolation",
+            "value": "color-interpolation"
+        },
+        {
+            "name": "colorRendering",
+            "value": "color-rendering"
+        },
+        {
+            "name": "fillOpacity",
+            "value": "fill-opacity"
+        },
+        {
+            "name": "fillRule",
+            "value": "fill-rule"
+        },
+        {
+            "name": "floodColor",
+            "value": "flood-color"
+        },
+        {
+            "name": "floodOpacity",
+            "value": "flood-opacity"
+        },
+        {
+            "name": "imageRendering",
+            "value": "image-rendering"
+        },
+        {
+            "name": "lightingColor",
+            "value": "lighting-color"
+        },
+        {
+            "name": "markerEnd",
+            "value": "marker-end"
+        },
+        {
+            "name": "markerMid",
+            "value": "marker-mid"
+        },
+        {
+            "name": "markerStart",
+            "value": "marker-start"
+        },
+        {
+            "name": "shapeRendering",
+            "value": "shape-rendering"
+        },
+        {
+            "name": "stopColor",
+            "value": "stop-color"
+        },
+        {
+            "name": "stopOpacity",
+            "value": "stop-opacity"
+        }
+    ]
+
+    for (let i = 0; i < hyphenatedAttributes.length; i++)
+    {
+        const hyphenatedAttribute = hyphenatedAttributes[i];
+        const regex = new RegExp(hyphenatedAttribute.value, "g");
+        jsx = jsx.replace(regex, hyphenatedAttribute.name);
+    }
+
+    // Fixe style attributes
+    const styleRegex = new RegExp("style=\"(.*?)\"", "g");
+    const styleMatches = jsx.match(styleRegex);
+    if (styleMatches)
+    {
+        for (let i = 0; i < styleMatches.length; i++)
+        {
+            const styleMatch = styleMatches[i];
+            const styleMatchSplit = styleMatch.split(";");
+            let newStyleMatch = "style={{";
+            for (let j = 0; j < styleMatchSplit.length; j++)
+            {
+                const styleMatchSplitItem = styleMatchSplit[j];
+                if (styleMatchSplitItem)
+                {
+                    const styleMatchSplitItemSplit = styleMatchSplitItem.split(":");
+                    if (styleMatchSplitItemSplit.length === 2)
+                    {
+                        const styleMatchSplitItemSplitKey = styleMatchSplitItemSplit[0].trim();
+                        const styleMatchSplitItemSplitValue = styleMatchSplitItemSplit[1].trim();
+                        newStyleMatch += styleMatchSplitItemSplitKey + ": \"" + styleMatchSplitItemSplitValue + "\", ";
+                    }
+                }
+            }
+
+            newStyleMatch += "}}";
+            jsx = jsx.replace(styleMatch, newStyleMatch);
+        }
+    }
+
 
     // Replace reactwow with ReactWOW
     jsx = jsx.replace(/reactwow/g, "ReactWOW");
