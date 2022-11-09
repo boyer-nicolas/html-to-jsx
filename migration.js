@@ -8,6 +8,8 @@ import chalk from 'chalk';
 import { exit } from 'process';
 import HTMLParser from 'node-html-parser';
 import fse from 'fs-extra';
+import { JSDOM } from 'jsdom';
+
 const viteFolder = "./vite";
 const processName = process.argv[2];
 const conversionFolder = "./jsx";
@@ -67,7 +69,8 @@ if (!processName)
     process.exit(1)
 }
 
-let componentDidMountJs;
+let componentDidMountJs = "";
+let componentDidMountPage = "";
 
 log("Starting migration process: " + processName);
 let functionName;
@@ -128,6 +131,16 @@ function createFunctionStart(name, pageTitle)
             JSXFunctionStart += "    document.title = \"" + pageTitle + "\";\n";
         }
 
+        if (componentDidMountPage !== undefined && componentDidMountPage !== null)
+        {
+            if (componentDidMountPage.includes("undefined"))
+            {
+                componentDidMountPage = componentDidMountPage.replace("undefined", "");
+            }
+
+            JSXFunctionStart += componentDidMountPage;
+        }
+
         JSXFunctionStart += "    return (\n";
     }
     else
@@ -139,10 +152,17 @@ function createFunctionStart(name, pageTitle)
         JSXFunctionStart += "        this.props = props;\n";
         JSXFunctionStart += "    }\n\n";
         JSXFunctionStart += "    componentDidMount() {\n";
+
         if (appendTitle === 1)
         {
             JSXFunctionStart += "        document.title = \"" + pageTitle + "\";\n";
         }
+
+        if (componentDidMountPage !== undefined && componentDidMountPage !== null)
+        {
+            JSXFunctionStart += componentDidMountPage;
+        }
+
         JSXFunctionStart += "    }\n\n";
         JSXFunctionStart += "    render() {\n";
         JSXFunctionStart += "    return (\n";
@@ -233,6 +253,35 @@ function isComponent(html)
 function handleFile(html, logPrefix, name, findComponents)
 {
     const root = HTMLParser.parse(html);
+
+    const body = root.querySelector("body");
+    if (body)
+    {
+        const bodyAttrs = body.rawAttrs;
+        const bodyAttrsArray = bodyAttrs.split(" ");
+        for (let i = 0; i < bodyAttrsArray.length; i++)
+        {
+            const attr = bodyAttrsArray[i];
+            if (attr.includes("class="))
+            {
+                const classes = attr.split("=")[1].replace(/"/g, "");
+                const classesArray = classes.split(" ");
+                for (let j = 0; j < classesArray.length; j++)
+                {
+                    const className = classesArray[j];
+                    if (className !== undefined && className !== null && className !== "")
+                    {
+                        const classToAdd = "document.body.classList.add(\"" + className + "\");\n";
+                        if (!componentDidMountPage.includes(classToAdd))
+                        {
+                            componentDidMountPage += classToAdd;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let imports = [];
 
     // Extract page title
@@ -260,7 +309,7 @@ function handleFile(html, logPrefix, name, findComponents)
         if (Header !== null)
         {
             const extractHeaderLoader = load(logPrefix + " - Extracting Header");
-            HeaderContents = Header.outerHTML;
+            HeaderContents = Header;
             Header.remove();
             extractHeaderLoader.succeed(logPrefix + " - Extracted Header");
         }
@@ -269,7 +318,7 @@ function handleFile(html, logPrefix, name, findComponents)
         if (Footer !== null)
         {
             const extractFooterLoader = load(logPrefix + " - Extracting Footer");
-            FooterContents = Footer.outerHTML;
+            FooterContents = Footer;
             Footer.remove();
             extractFooterLoader.succeed(logPrefix + " - Extracted Footer");
         }
@@ -278,7 +327,7 @@ function handleFile(html, logPrefix, name, findComponents)
         if (Sidebar !== null)
         {
             const extractSidebarLoader = load(logPrefix + " - Extracting Sidebar");
-            SidebarContents = Sidebar.outerHTML;
+            SidebarContents = Sidebar;
             Sidebar.remove();
             extractSidebarLoader.succeed(logPrefix + " - Extracted Sidebar");
         }
@@ -288,92 +337,93 @@ function handleFile(html, logPrefix, name, findComponents)
     const imgTags = root.querySelectorAll("img");
     imgTags.forEach(imgTag =>
     {
-        if (!imgTag.rawAttrs.endsWith("/"))
+        let importImgLoader = load(logPrefix + " - Importing and converting img tag");
+        const imgSrc = imgTag.getAttribute("src");
+        if (imgSrc !== null)
         {
-            let unclosedImgLoader = load(logPrefix + " - Fixing unclosed img tag");
-            imgTag.rawAttrs += "/";
-            unclosedImgLoader.succeed(logPrefix + " - Fixed unclosed img tag");
-
-            let importImgLoader = load(logPrefix + " - Importing and converting img tag");
-            const imgSrc = imgTag.getAttribute("src");
-            if (imgSrc !== null)
+            if (fs.existsSync(imgSrc))
             {
-                if (fs.existsSync(imgSrc))
+                // Create img folder if it doesn't exist
+                const imgFolder = assetsFolder + "/img";
+                let imgDest;
+
+                if (imgSrc.startsWith("/"))
                 {
-                    // Create img folder if it doesn't exist
-                    const imgFolder = assetsFolder + "/img";
-                    let imgDest;
+                    imgDest = imgSrc.substring(1);
+                }
 
-                    if (imgSrc.startsWith("/"))
-                    {
-                        imgDest = imgSrc.substring(1);
-                    }
+                if (!fs.existsSync(imgFolder))
+                {
+                    fs.mkdirSync(imgFolder);
+                }
 
-                    if (!fs.existsSync(imgFolder))
-                    {
-                        fs.mkdirSync(imgFolder);
-                    }
+                if (imgSrc.includes("img/") || imgSrc.includes("images/"))
+                {
+                    // Strip img/ or images/ from path
+                    imgDest = imgSrc.replace("img/", "");
+                    imgDest = imgSrc.replace("images/", "");
+                }
 
-                    if (imgSrc.includes("img/") || imgSrc.includes("images/"))
+                // If image source contains folders, create them 
+                const imgSrcFolders = imgDest.split("/");
+                if (imgSrcFolders.length > 1)
+                {
+                    let folderPath = imgFolder;
+                    for (let i = 0; i < imgSrcFolders.length - 1; i++)
                     {
-                        // Strip img/ or images/ from path
-                        imgDest = imgSrc.replace("img/", "");
-                        imgDest = imgSrc.replace("images/", "");
-                    }
-
-                    // If image source contains folders, create them 
-                    const imgSrcFolders = imgDest.split("/");
-                    if (imgSrcFolders.length > 1)
-                    {
-                        let folderPath = imgFolder;
-                        for (let i = 0; i < imgSrcFolders.length - 1; i++)
+                        folderPath += "/" + imgSrcFolders[i];
+                        if (!fs.existsSync(folderPath))
                         {
-                            folderPath += "/" + imgSrcFolders[i];
-                            if (!fs.existsSync(folderPath))
-                            {
-                                fs.mkdirSync(folderPath);
-                            }
+                            fs.mkdirSync(folderPath);
                         }
                     }
+                }
 
-                    fs.copyFile("./" + imgSrc, imgFolder + "/" + imgDest, (err) =>
+                fs.copyFile("./" + imgSrc, imgFolder + "/" + imgDest, (err) =>
+                {
+                    if (err)
                     {
-                        if (err)
-                        {
-                            throw err;
-                        }
-                    });
-
-                    let fileName = imgSrc.split("/").pop();
-                    fileName = fileName.split(".").shift();
-                    fileName = fileName.replace(/-([a-z])/g, g => g[1].toUpperCase());
-                    // Replace remaining hyphens with underscores
-                    fileName = fileName.replace(/-/g, "_");
-                    // Replace remaining underscores with camel case
-                    fileName = fileName.replace(/_([a-z])/g, g => g[1].toUpperCase());
-                    fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
-
-                    fileName = fileName + "Img";
-
-                    // If image is in a folder, add folder name to file name
-                    if (imgSrcFolders.length > 1)
-                    {
-                        fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
+                        throw err;
                     }
+                });
 
+                let fileName = imgSrc.split("/").pop();
+                fileName = fileName.split(".").shift();
+                fileName = fileName.replace(/-([a-z])/g, g => g[1].toUpperCase());
+                // Replace remaining hyphens with underscores
+                fileName = fileName.replace(/-/g, "_");
+                // Replace remaining underscores with camel case
+                fileName = fileName.replace(/_([a-z])/g, g => g[1].toUpperCase());
+                fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+
+                fileName = fileName + "Img";
+
+                // If image is in a folder, add folder name to file name
+                if (imgSrcFolders.length > 1)
+                {
+                    fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
                     fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+                }
 
-                    const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
+                const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
 
-                    if (!imports.includes(fullImport))
-                    {
-                        imports.push(fullImport);
-                    }
+                if (!imports.includes(fullImport))
+                {
+                    imports.push(fullImport);
+                }
 
-                    const jsxImgSrc = "{" + fileName + "}";
-                    imgTag.setAttribute("src", jsxImgSrc);
+                const jsxImgSrc = "{" + fileName + "}";
+                imgTag.setAttribute("src", jsxImgSrc);
 
-                    importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
+                imgTag.setAttribute("alt", imgTag.getAttribute("alt") || fileName);
+
+                importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
+
+                if (!imgTag.rawAttrs.endsWith("/"))
+                {
+                    let unclosedImgLoader = load(logPrefix + " - Fixing unclosed img tag");
+                    imgTag.rawAttrs += "/";
+                    unclosedImgLoader.succeed(logPrefix + " - Fixed unclosed img tag");
                 }
             }
         }
@@ -443,7 +493,6 @@ function handleFile(html, logPrefix, name, findComponents)
     {
         const jsLinkTag = jsLinkTags[i];
         const link = jsLinkTag.getAttribute("src");
-        const jsImport = "import '" + assetsFolder.replace("./jsx/", "../") + "/" + link + "';\n";
 
         if (!link.includes("wow"))
         {
@@ -461,7 +510,11 @@ function handleFile(html, logPrefix, name, findComponents)
 
                 // File is extra javascript, put in main layout componentdidmount
                 const fileContents = fs.readFileSync(assetsFolder + "/" + link, "utf8");
-                componentDidMountJs = fileContents;
+
+                if (!fileContents.includes("WOW"))
+                {
+                    componentDidMountJs = fileContents;
+                }
             }
             else if (link.includes("https://"))
             {
@@ -475,6 +528,33 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     jsConvertLoader.succeed(logPrefix + " - Converted js link to import");
+
+    const inlineJsConvertLoader = load(logPrefix + " - Converting inline js to componentDidMount");
+    const inlineJsTags = root.querySelectorAll("script:not([src])");
+    for (let i = 0; i < inlineJsTags.length; i++)
+    {
+        const inlineJsTag = inlineJsTags[i];
+        const fileContents = inlineJsTag.innerHTML;
+        if (!fileContents.includes("WOW"))
+        {
+            componentDidMountJs = fileContents;
+        }
+        inlineJsTag.remove();
+    }
+
+    inlineJsConvertLoader.succeed(logPrefix + " - Converted inline js to componentDidMount");
+
+    const inlineCssConvertLoader = load(logPrefix + " - Converting inline css to componentDidMount");
+    const inlineCssTags = root.querySelectorAll("style");
+    for (let i = 0; i < inlineCssTags.length; i++)
+    {
+        const inlineCssTag = inlineCssTags[i];
+        const fileContents = inlineCssTag.innerHTML;
+        componentDidMountCss = fileContents;
+        inlineCssTag.remove();
+    }
+
+    inlineCssConvertLoader.succeed(logPrefix + " - Converted inline css to componentDidMount");
 
     // Detect wow.js from class
     const lookforWow = load(logPrefix + " - Detecting wow.js from class");
@@ -492,25 +572,10 @@ function handleFile(html, logPrefix, name, findComponents)
         // Convert to ReactWOW
         for (let i = 0; i < wowTags.length; i++)
         {
-            const wowTag = wowTags[i];
-
+            let wowTag = wowTags[i];
             const wowDelay = wowTag.getAttribute("data-wow-delay");
-            if (wowDelay)
-            {
-                wowTag.setAttribute("delay", wowDelay);
-            }
-
             const wowDuration = wowTag.getAttribute("data-wow-duration");
-            if (wowDuration)
-            {
-                wowTag.setAttribute("duration", wowDuration);
-            }
-
-            const animation = wowTag.getAttribute("data-wow-animation");
-            if (animation)
-            {
-                wowTag.setAttribute("animation", animation);
-            }
+            let animation = wowTag.getAttribute("data-wow-animation");
 
             // Try and find animation i classlist
             if (!animation)
@@ -523,7 +588,7 @@ function handleFile(html, logPrefix, name, findComponents)
                     const animatecssAnimation = animatecssAnimations[k];
                     if (classList.contains(animatecssAnimation))
                     {
-                        wowTag.setAttribute("animation", animatecssAnimation);
+                        animation = animatecssAnimation;
                         // Remove class
                         wowTag.classList.remove(animatecssAnimation);
                         break;
@@ -538,8 +603,15 @@ function handleFile(html, logPrefix, name, findComponents)
             wowTag.removeAttribute("data-wow-duration");
             wowTag.removeAttribute("data-wow-animation");
 
-            // Set tagname to ReactWOW
-            wowTag.tagName = "ReactWOW";
+            // Add ReactWOW
+            const ReactWOW = "<ReactWOW animation='" + animation + "' delay='" + wowDelay + "' duration='" + wowDuration + "'>" + wowTag.outerHTML + "</ReactWOW>";
+
+            wowTag.innertHTML = ReactWOW;
+
+            // Replace wowTag with ReactWOW
+            wowTag.replaceWith(ReactWOW);
+
+            // Replace tag
             wowImportLoader.succeed(logPrefix + " - Converted wow.js to ReactWOW");
         }
     }
@@ -605,18 +677,12 @@ function handleFile(html, logPrefix, name, findComponents)
 
     const jsxConversionLoader = load(logPrefix + " - Converting to JSX");
 
-    // Convert to JSX
+    // // Convert to JSX
     var converter = new HTMLtoJSX({
         createClass: false
     });
 
     var jsx = converter.convert(root.toString());
-
-    var JSXFunctionEnd = createFunctionEnd();
-
-    const importsToString = imports.join("");
-
-    jsx = importsToString + JSXFunctionStart + jsx + JSXFunctionEnd;
 
     // Replace reactwow with ReactWOW
     jsx = jsx.replace(/reactwow/g, "ReactWOW");
@@ -655,10 +721,56 @@ function handleFile(html, logPrefix, name, findComponents)
         }
     }
 
-    // Remove quotes arround img src object
+    // // Remove quotes arround img src object
     jsx = jsx.replace(/src="(\{.*\})"/g, "src=$1");
 
+    // If element repeats, make it a component
+    const jsxElements = jsx.match(/<.*?>/g);
+    if (jsxElements)
+    {
+        const jsxElementCount = {};
+        jsxElements.forEach(jsxElement =>
+        {
+            if (jsxElementCount[jsxElement])
+            {
+                jsxElementCount[jsxElement]++;
+            }
+            else
+            {
+                jsxElementCount[jsxElement] = 1;
+            }
+        });
+
+        // Check if any elements are repeated more than 3 times
+        for (const jsxElement in jsxElementCount)
+        {
+            if (jsxElementCount[jsxElement] > 3)
+            {
+                // Check if element is a component
+                if (isComponent(jsxElement))
+                {
+                    // Create component
+                    const componentFolder = path.join(__dirname, "src", "components");
+                    const componentFile = path.join(componentFolder, jsxElement.replace("<", "").replace(">", "").toLowerCase() + ".js");
+                    const componentLoad = load(logPrefix + " - Creating component " + jsxElement.replace("<", "").replace(">", "").toLowerCase());
+                    fs.writeFileSync(componentFile, jsxElement);
+                    componentLoad.succeed(logPrefix + " - Created component " + jsxElement.replace("<", "").replace(">", "").toLowerCase());
+
+                    // Replace element with component
+                    jsx = jsx.replace(new RegExp(jsxElement, "g"), jsxElement.replace("<", "").replace(">", "").toLowerCase());
+                }
+            }
+        }
+    }
+
+    var JSXFunctionEnd = createFunctionEnd();
+
+    const importsToString = imports.join("");
+
+    jsx = importsToString + JSXFunctionStart + jsx + JSXFunctionEnd;
+
     jsxConversionLoader.succeed(logPrefix + " - Converted to JSX");
+
     return jsx;
 }
 
