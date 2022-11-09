@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import { exit } from 'process';
 import HTMLParser from 'node-html-parser';
 import fse from 'fs-extra';
-import { JSDOM } from 'jsdom';
+import path from 'path';
 
 const viteFolder = "./vite";
 const processName = process.argv[2];
@@ -21,6 +21,34 @@ const assetsDist = "/Assets";
 const pagesDist = "/Pages";
 const layoutsDist = "/Layouts";
 const componentsDist = "/Components";
+const imagesDist = "/Images";
+
+
+
+function findFiles(folder, extension)
+{
+    let findFilesLoader = load("Finding " + extension + " files");
+    let files = [];
+    let filesFound = false;
+
+    if (fs.existsSync(folder))
+    {
+        files = fs.readdirSync(folder);
+        filesFound = true;
+    }
+
+    if (filesFound === false)
+    {
+        findFilesLoader.fail("Failed to find " + extension + " files");
+        return false;
+    }
+    else
+    {
+        findFilesLoader.succeed("Found " + extension + " files");
+    }
+
+    return files;
+}
 
 function load(message)
 {
@@ -67,6 +95,31 @@ if (!processName)
 {
     log('Usage: node migration.js <process?function,class>')
     process.exit(1)
+}
+
+function isAssetsPath(path)
+{
+    return path.includes(assetsDist);
+}
+
+function isPagesPath(path)
+{
+    return path.includes(pagesDist);
+}
+
+function isLayoutsPath(path)
+{
+    return path.includes(layoutsDist);
+}
+
+function isComponentsPath(path)
+{
+    return path.includes(componentsDist);
+}
+
+function isImagePath(path)
+{
+    return path.includes("images");
 }
 
 let componentDidMountJs = "";
@@ -234,6 +287,7 @@ if (fs.existsSync(pagesFolder))
 
 clearPagesLoad.succeed("Cleared pages folder");
 
+let dependencies = [];
 
 fs.mkdirSync(pagesFolder);
 
@@ -244,6 +298,99 @@ if (fs.existsSync(layoutsFolder))
 }
 
 fs.mkdirSync(layoutsFolder);
+
+function stripPath(path)
+{
+    const fileExtension = path.split(".").pop();
+    let pathWithoutExtension = path.replace("." + fileExtension, "");
+    const foldersToRemove = [
+        "css",
+        "style",
+        "stylesheet",
+        "asset",
+        "script",
+        "js",
+        "javascript",
+        "img",
+        "image",
+        "font",
+    ]
+
+    for (let i = 0; i < foldersToRemove.length; i++)
+    {
+        const folderToRemove = foldersToRemove[i];
+        const doNotRemoveExtension = "." + folderToRemove;
+
+        const folderToRemoveUpperCase = folderToRemove.toUpperCase();
+        const folderToRemoveCamelCase = folderToRemove.replace(/-([a-z])/g, g => g[1].toUpperCase());
+        const folderToRemovePlural = folderToRemove + "s";
+
+        if (pathWithoutExtension.includes(folderToRemovePlural))
+        {
+            pathWithoutExtension = pathWithoutExtension.replace(folderToRemovePlural, "");
+        }
+
+        if (pathWithoutExtension.includes(foldersToRemove[i]))
+        {
+            pathWithoutExtension = pathWithoutExtension.replace(foldersToRemove[i], "");
+        }
+
+        if (pathWithoutExtension.includes(folderToRemoveUpperCase))
+        {
+            pathWithoutExtension = pathWithoutExtension.replace(folderToRemoveUpperCase, "");
+        }
+
+        if (pathWithoutExtension.includes(folderToRemoveCamelCase))
+        {
+            pathWithoutExtension = pathWithoutExtension.replace(folderToRemoveCamelCase, "");
+        }
+
+        // Remove "//" from pathWithoutExtension
+        pathWithoutExtension = pathWithoutExtension.replace("//", "/");
+    }
+
+    return pathWithoutExtension + "." + fileExtension;
+}
+
+function findFile(file)
+{
+    let findFileLoader = load("Finding " + file);
+    let fileFound = false;
+    let fileContents;
+    let fileLocation;
+
+    if (fs.existsSync(file))
+    {
+        fileFound = true;
+        fileContents = fs.readFileSync(file, "utf8");
+        fileLocation = file;
+    }
+    else
+    {
+        for (let i = 0; i < files.length; i++)
+        {
+            const fileToCheck = files[i];
+            if (fileToCheck.includes(file))
+            {
+                fileFound = true;
+                fileContents = fs.readFileSync(fileToCheck, "utf8");
+                fileLocation = fileToCheck;
+            }
+        }
+    }
+
+    if (fileFound === false)
+    {
+        findFileLoader.fail("Failed to find " + file);
+        return false;
+    }
+    else
+    {
+        findFileLoader.succeed("Found " + file);
+    }
+
+    return fileLocation;
+}
 
 function isComponent(html)
 {
@@ -334,10 +481,10 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     // Resolve unclosed img tags
+    let importImgLoader = load(logPrefix + " - Importing and converting img tag");
     const imgTags = root.querySelectorAll("img");
     imgTags.forEach(imgTag =>
     {
-        let importImgLoader = load(logPrefix + " - Importing and converting img tag");
         const imgSrc = imgTag.getAttribute("src");
         if (imgSrc !== null)
         {
@@ -360,8 +507,7 @@ function handleFile(html, logPrefix, name, findComponents)
                 if (imgSrc.includes("img/") || imgSrc.includes("images/"))
                 {
                     // Strip img/ or images/ from path
-                    imgDest = imgSrc.replace("img/", "");
-                    imgDest = imgSrc.replace("images/", "");
+                    imgDest = stripPath(imgSrc);
                 }
 
                 // If image source contains folders, create them 
@@ -379,7 +525,7 @@ function handleFile(html, logPrefix, name, findComponents)
                     }
                 }
 
-                fs.copyFile("./" + imgSrc, imgFolder + "/" + imgDest, (err) =>
+                fs.copyFile("./" + imgSrc, imgFolder + imgDest, (err) =>
                 {
                     if (err)
                     {
@@ -401,11 +547,13 @@ function handleFile(html, logPrefix, name, findComponents)
                 // If image is in a folder, add folder name to file name
                 if (imgSrcFolders.length > 1)
                 {
-                    fileName = imgSrcFolders[imgSrcFolders.length - 2] + fileName;
+                    const folderName = imgSrcFolders[imgSrcFolders.length - 2];
+                    const folderNameCamelCase = folderName.replace(/-([a-z])/g, g => g[1].toUpperCase());
+                    fileName = folderNameCamelCase + fileName;
                     fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
                 }
 
-                const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + "/" + imgDest + "';";
+                const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + imgDest + "';";
 
                 if (!imports.includes(fullImport))
                 {
@@ -415,9 +563,16 @@ function handleFile(html, logPrefix, name, findComponents)
                 const jsxImgSrc = "{" + fileName + "}";
                 imgTag.setAttribute("src", jsxImgSrc);
 
-                imgTag.setAttribute("alt", imgTag.getAttribute("alt") || fileName);
+                const alt = imgTag.getAttribute("alt");
+                if (alt !== null && alt !== "" && alt !== undefined && alt !== "#")
+                {
+                    imgTag.setAttribute("alt", alt);
+                }
+                else
+                {
+                    imgTag.setAttribute("alt", fileName);
+                }
 
-                importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
 
                 if (!imgTag.rawAttrs.endsWith("/"))
                 {
@@ -428,6 +583,9 @@ function handleFile(html, logPrefix, name, findComponents)
             }
         }
     });
+
+    importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
+
 
     // Resolve unclosed input tags
     const fixInputLoader = load(logPrefix + " - Fixing unclosed input tags");
@@ -448,37 +606,125 @@ function handleFile(html, logPrefix, name, findComponents)
     {
         const cssLinkTag = cssLinkTags[i];
         const link = cssLinkTag.getAttribute("href");
-        const cssImport = "import '" + assetsFolder.replace("./jsx/", "../") + "/" + link + "';\n";
 
         // Look for file in current directory
         if (fs.existsSync(link))
         {
-            // Create css folder if it doesn't exist
-            if (!fs.existsSync(assetsFolder + "/css"))
-            {
-                fs.mkdirSync(assetsFolder + "/css");
-            }
+            const cssFolder = assetsFolder + "/css";
+            const scssFolder = assetsFolder + "/scss";
 
-            // IF link contains subfolders, create them
-            const linkFolders = link.split("/");
-            if (linkFolders.length > 1)
+            const scssExtension = ".scss";
+            // Look for scss files in the current directory and subdirectories
+            const cssFileNoExtension = link.split(".").shift();
+
+            // Replace "css" with "scss" in file name
+            const cssFileToFind = cssFileNoExtension.replace("css", "scss");
+
+            const scssFile = findFile(cssFileToFind + scssExtension);
+
+            if (scssFile !== false)
             {
-                let folderPath = assetsFolder + "/css";
-                for (let i = 0; i < linkFolders.length - 1; i++)
+                if (!dependencies.includes("sass"))
                 {
-                    folderPath += "/" + linkFolders[i];
-                    if (!fs.existsSync(folderPath))
+                    dependencies.push("sass");
+                }
+
+                console.log(chalk.yellow(logPrefix + " - Found scss file with the same name as the css file: " + scssFile));
+                if (!fs.existsSync(scssFolder))
+                {
+                    fs.mkdirSync(scssFolder);
+                }
+
+                const scssFileNoPathFound = scssFile.split("/").pop();
+                const scssFilePathFound = scssFile.replace(scssFileNoPathFound, "");
+
+                // Find all scss files in the same directory as the scss file found
+                const scssFiles = findFiles(scssFilePathFound, scssExtension);
+
+                fs.copyFile("./" + scssFile, scssFolder + "/" + scssFileNoPathFound, (err) =>
+                {
+                    if (err)
                     {
-                        fs.mkdirSync(folderPath);
+                        throw err;
+                    }
+                });
+
+                // Copy all scss files in the same directory as the scss file found
+                for (let i = 0; i < scssFiles.length; i++)
+                {
+                    const scssFile = scssFiles[i];
+                    const scssFileNoPath = scssFile.split("/").pop();
+                    fs.copyFile("./" + scssFilePathFound + scssFile, scssFolder + "/" + scssFileNoPath, (err) =>
+                    {
+                        if (err)
+                        {
+                            throw err;
+                        }
+                    });
+                }
+
+                // Fix paths in scss files
+                for (let i = 0; i < scssFiles.length; i++)
+                {
+                    const scssFile = scssFiles[i];
+                    const scssFileNoPath = scssFile.split("/").pop();
+                    const scssFileContent = fs.readFileSync(scssFolder + "/" + scssFileNoPath, "utf8");
+
+                    const urls = scssFileContent.match(/url\((.*?)\)/g);
+                    if (urls !== null)
+                    {
+                        for (let i = 0; i < urls.length; i++)
+                        {
+                            const url = urls[i];
+                            const urlPath = url.split("(").pop().split(")").shift();
+                            const urlFileName = urlPath.split("/").pop();
+                            // Check if url contains image
+                            if (url.includes(".png") || url.includes(".jpg") || url.includes(".jpeg") || url.includes(".gif"))
+                            {
+                                if (!isImagePath(url))
+                                {
+                                    const newUrl = url.replace(urlPath, "../" + imagesDist + "/" + urlFileName);
+                                    const newScssFileContent = scssFileContent.replace(url, newUrl);
+                                    fs.writeFileSync(scssFolder + "/" + scssFileNoPath, newScssFileContent, "utf8");
+                                }
+                            }
+                        }
                     }
                 }
+
+                // Remove the css link tag
+                cssLinkTag.remove();
+
+                // Add the scss import to the imports array
+                const scssImport = "import '" + scssFolder.replace('./jsx/', '../') + "/" + scssFileNoPathFound + "';";
+
+                if (!imports.includes(scssImport))
+                {
+                    imports.push(scssImport);
+                }
+            }
+            else
+            {
+                // Create css folder if it doesn't exist
+                if (!fs.existsSync(cssFolder))
+                {
+                    fs.mkdirSync(cssFolder);
+                }
+
+                let dest = stripPath(link);
+
+                // Fix paths in css files
+                const cssFileContent = fs.readFileSync(link, "utf8");
+                const cssFileContentFixed = cssFileContent.replace(/url\((.*?)\)/g, "url(../img/$1)");
+                fs.writeFileSync(cssFolder + "/" + dest, cssFileContentFixed);
+
+                // Copy file to assets folder
+                const cssImport = "import '" + cssFolder.replace('./jsx/', '../') + dest + "';";
+                imports.push(cssImport);
             }
 
-            // Copy file to assets folder
-            fs.copyFileSync("./" + link, assetsFolder + "/" + link);
         }
 
-        imports.push(cssImport);
 
         // Remove link tag
         cssLinkTag.remove();
@@ -499,17 +745,20 @@ function handleFile(html, logPrefix, name, findComponents)
             // Look for file in current directory
             if (fs.existsSync(link))
             {
+                const jsFolder = assetsFolder + "/js";
                 // Create js folder if it doesn't exist
-                if (!fs.existsSync(assetsFolder + "/js"))
+                if (!fs.existsSync(jsFolder))
                 {
-                    fs.mkdirSync(assetsFolder + "/js");
+                    fs.mkdirSync(jsFolder);
                 }
 
+                let dest = stripPath(link);
+
                 // Copy file to assets folder
-                fs.copyFileSync("./" + link, assetsFolder + "/" + link);
+                fs.copyFileSync("./" + link, jsFolder + "/" + dest);
 
                 // File is extra javascript, put in main layout componentdidmount
-                const fileContents = fs.readFileSync(assetsFolder + "/" + link, "utf8");
+                const fileContents = fs.readFileSync(link, "utf8");
 
                 if (!fileContents.includes("WOW"))
                 {
@@ -561,6 +810,10 @@ function handleFile(html, logPrefix, name, findComponents)
     const wowTags = root.querySelectorAll(".wow");
     if (wowTags.length > 0)
     {
+        if (!dependencies.includes("wowjs"))
+        {
+            dependencies.push("react-wow");
+        }
         lookforWow.succeed(logPrefix + " - Detected wow.js from class");
         const wowImportLoader = load(logPrefix + " - Converting wow.js to ReactWOW");
         // Add reactWOW to imports
@@ -675,6 +928,18 @@ function handleFile(html, logPrefix, name, findComponents)
         }
     });
 
+    // Convert a to Link
+    const aConversionLoader = load(logPrefix + " - Converting a to Link");
+    const aTags = root.querySelectorAll("a");
+    aTags.forEach(aTag =>
+    {
+        const href = aTag.getAttribute("href");
+        const tag = "<Link to='" + href + "'>" + aTag.innerHTML + "</Link>";
+        aTag.replaceWith(tag);
+    });
+
+    aConversionLoader.succeed(logPrefix + " - Converted a to Link");
+
     const jsxConversionLoader = load(logPrefix + " - Converting to JSX");
 
     // // Convert to JSX
@@ -689,24 +954,6 @@ function handleFile(html, logPrefix, name, findComponents)
 
     // Replace link with Link
     jsx = jsx.replace(/link/g, "Link");
-
-    const jsxLinksStart = jsx.match(/<a/g);
-    if (jsxLinksStart)
-    {
-        jsx = jsx.replace(/<a/g, "<Link");
-    }
-
-    const jsxHrefs = jsx.match(/href/g);
-    if (jsxHrefs)
-    {
-        jsx = jsx.replace(/href/g, "to");
-    }
-
-    const jsxLinksEnd = jsx.match(/<\/a>/g);
-    if (jsxLinksEnd) 
-    {
-        jsx = jsx.replace(/<\/a>/g, "</Link>");
-    }
 
     const jsxReactLinks = jsx.match(/<Link/g);
     if (jsxReactLinks)
@@ -1064,7 +1311,8 @@ execute("yarn create vite vite --template react", function (output)
 
         // Installing dependencies: react-router-dom, react-wow
         let installDependenciesLoader = load("Adding dependencies: react-router-dom, react-wow");
-        execute("cd vite && yarn add react-router-dom react-wow", function (success)
+
+        execute("cd vite && yarn add react-router-dom " + dependencies.join(" "), function (success)
         {
             installDependenciesLoader.succeed("Added dependencies: react-router-dom, react-wow");
 
