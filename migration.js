@@ -1,4 +1,3 @@
-// Read script params
 import prettier from 'prettier';
 import HTMLtoJSX from 'htmltojsx';
 import fs from 'fs';
@@ -10,21 +9,65 @@ import HTMLParser from 'node-html-parser';
 import fse from 'fs-extra';
 import path from 'path';
 
+/**
+ * ===================== START UTILS =====================
+ */
+
+/**
+ * Consts
+ */
 const viteFolder = "./vite";
 const processName = process.argv[2];
+
+const assetsFolder = "/Assets";
+const pagesFolder = "/Pages";
+const layoutsFolder = "/Layouts";
+const componentsFolder = "/Components";
+const imgFolder = "/img";
+const cssFolder = "/css";
+const scssFolder = "/scss";
+const jsFolder = "/js";
+const fontsFolder = "/fonts";
+
+// Conversion
 const conversionFolder = "./jsx";
-const assetsFolder = conversionFolder + "/Assets";
-const pagesFolder = conversionFolder + "/Pages";
-const layoutsFolder = conversionFolder + "/Layouts";
-const componentsFolder = conversionFolder + "/Components";
-const assetsDist = "/Assets";
-const pagesDist = "/Pages";
-const layoutsDist = "/Layouts";
-const componentsDist = "/Components";
-const imagesDist = "/Images";
+const conversionAssets = conversionFolder + assetsFolder;
+const conversionPages = conversionFolder + pagesFolder;
+const conversionLayouts = conversionFolder + layoutsFolder;
+const conversionComponents = conversionFolder + componentsFolder;
+const conversionImg = conversionAssets + imgFolder;
+const conversionCss = conversionAssets + cssFolder;
+const conversionScss = conversionAssets + scssFolder;
+const conversionJs = conversionAssets + jsFolder;
+const conversionFonts = conversionAssets + fontsFolder;
 
+// Imports
+const importBase = "..";
+const importAssets = importBase + assetsFolder;
+const importPages = "." + pagesFolder;
+const importLayouts = "." + layoutsFolder;
+const importComponents = importBase + componentsFolder;
+const importImg = importAssets + imgFolder;
+const scssImportImg = importBase + imgFolder;
+const importCss = importAssets + cssFolder;
+const importScss = importAssets + scssFolder;
+const importJs = importAssets + jsFolder;
+const importFonts = importAssets + fontsFolder;
 
+/**
+ * Vars
+ */
+let componentDidMountJs = "";
+let componentDidMountPage = "";
+let functionName = "";
+let HeaderContents, FooterContents, SidebarContents;
+let dependencies = [];
+let imports = [];
+let logPrefix = "";
 
+/**
+ * Find files in a directory recursively
+ */
 function findFiles(folder, extension)
 {
     let findFilesLoader = load("Finding " + extension + " files");
@@ -50,53 +93,59 @@ function findFiles(folder, extension)
     return files;
 }
 
+/**
+ * Find a single file in a directory recursively
+ */
+function findFile(file)
+{
+    let fileFound = false;
+    let fileContents;
+    let fileLocation;
+
+    if (fs.existsSync(file))
+    {
+        fileFound = true;
+        fileContents = fs.readFileSync(file, "utf8");
+        fileLocation = file;
+    }
+    else
+    {
+        fileFound = false;
+    }
+
+    if (fileFound === false)
+    {
+        return false;
+    }
+
+    return fileLocation;
+}
+
+/**
+ * Show loading message
+ */
 function load(message)
 {
     return ora(`${chalk.cyanBright(message)}`).start();
 }
 
+/**
+ * Pretty log
+ */
 function log(message)
 {
     console.log(chalk.cyanBright("[MIGRATION] ") + message);
 }
 
+/**
+ * Exec shell command
+ */
 function execute(command, callback)
 {
     exec(command, function (error, stdout, stderr) { callback(stdout); });
 };
 
-let checkHtml = load("Checking for HTML files");
-// Check if there are any .html files in the current directory
-const files = fs.readdirSync("./");
-let filesExist = false;
-for (let i = 0; i < files.length; i++)
-{
-    const fileName = files[i];
-    const fileExtension = fileName.split(".").pop();
-
-    if (fileExtension === "html")
-    {
-        filesExist = true;
-        break;
-    }
-}
-
-if (!filesExist)
-{
-    checkHtml.fail("No HTML files found");
-    exit
-}
-else
-{
-    checkHtml.succeed("Found HTML files");
-}
-
-if (!processName)
-{
-    log('Usage: node migration.js <process?function,class>')
-    process.exit(1)
-}
-
+// If path is assets, pages, layouts, components, images, css, scss or js
 function isAssetsPath(path)
 {
     return path.includes(assetsDist);
@@ -119,15 +168,12 @@ function isComponentsPath(path)
 
 function isImagePath(path)
 {
-    return path.includes("images");
+    return path === importImg;
 }
 
-let componentDidMountJs = "";
-let componentDidMountPage = "";
-
-log("Starting migration process: " + processName);
-let functionName;
-
+/**
+ * Create function name
+ */
 function createFunction(fileName, name)
 {
     let createLoader = load("Creating " + name + " function");
@@ -165,6 +211,9 @@ function createFunction(fileName, name)
     return functionName;
 }
 
+/**
+ * Create function start
+ */
 function createFunctionStart(name, pageTitle)
 {
     let createFunctionStartLoader = load("Creating " + name + " function start");
@@ -226,6 +275,9 @@ function createFunctionStart(name, pageTitle)
     return JSXFunctionStart;
 }
 
+/**
+ * Create function end
+ */
 function createFunctionEnd()
 {
     let createFunctionEndLoader = load("Creating " + functionName + " function end");
@@ -246,59 +298,10 @@ function createFunctionEnd()
     return JSXFunctionEnd;
 }
 
-let HeaderContents, FooterContents, SidebarContents;
 
-if (fs.existsSync(conversionFolder))
-{
-    fse.removeSync(conversionFolder);
-}
-
-fs.mkdirSync(conversionFolder);
-
-// Clear and create assets folder
-if (fs.existsSync(assetsFolder))
-{
-    let clearAssetsLoad = load("Clearing assets folder");
-    fs.rmSync(assetsFolder, { recursive: true }, (err) =>
-    {
-        if (err)
-        {
-            clearAssetsLoad.fail("Failed to clear assets folder");
-            throw err;
-        }
-    });
-    clearAssetsLoad.succeed("Cleared assets folder");
-}
-fs.mkdirSync(assetsFolder);
-
-// Clear and create pages folder
-let clearPagesLoad = load("Clearing pages folder");
-if (fs.existsSync(pagesFolder))
-{
-    fs.rmSync(pagesFolder, { recursive: true }, (err) =>
-    {
-        if (err)
-        {
-            clearPagesLoad.fail("Failed to clear pages folder");
-            throw err;
-        }
-    });
-}
-
-clearPagesLoad.succeed("Cleared pages folder");
-
-let dependencies = [];
-
-fs.mkdirSync(pagesFolder);
-
-// Clear and create layouts folder
-if (fs.existsSync(layoutsFolder))
-{
-    fs.rmSync(layoutsFolder, { recursive: true });
-}
-
-fs.mkdirSync(layoutsFolder);
-
+/**
+ * Strip a path of its file name
+ */
 function stripPath(path)
 {
     const fileExtension = path.split(".").pop();
@@ -352,85 +355,140 @@ function stripPath(path)
     return pathWithoutExtension + "." + fileExtension;
 }
 
-function findFile(file)
-{
-    let findFileLoader = load("Finding " + file);
-    let fileFound = false;
-    let fileContents;
-    let fileLocation;
-
-    if (fs.existsSync(file))
-    {
-        fileFound = true;
-        fileContents = fs.readFileSync(file, "utf8");
-        fileLocation = file;
-    }
-    else
-    {
-        for (let i = 0; i < files.length; i++)
-        {
-            const fileToCheck = files[i];
-            if (fileToCheck.includes(file))
-            {
-                fileFound = true;
-                fileContents = fs.readFileSync(fileToCheck, "utf8");
-                fileLocation = fileToCheck;
-            }
-        }
-    }
-
-    if (fileFound === false)
-    {
-        findFileLoader.fail("Failed to find " + file);
-        return false;
-    }
-    else
-    {
-        findFileLoader.succeed("Found " + file);
-    }
-
-    return fileLocation;
-}
-
 function isComponent(html)
 {
     return html.includes("header") || html.includes("footer") || html.includes("sidebar");
 }
 
-function handleFile(html, logPrefix, name, findComponents)
+/**
+ * Check if there are any .html files in the directory
+ */
+function htmlExists()
 {
-    const root = HTMLParser.parse(html);
+    let checkHtml = load("Checking for HTML files");
+    const files = fs.readdirSync("./");
+    let filesExist = false;
 
-    const body = root.querySelector("body");
-    if (body)
+    for (let i = 0; i < files.length; i++)
     {
-        const bodyAttrs = body.rawAttrs;
-        const bodyAttrsArray = bodyAttrs.split(" ");
-        for (let i = 0; i < bodyAttrsArray.length; i++)
+        const fileName = files[i];
+        const fileExtension = fileName.split(".").pop();
+
+        if (fileExtension === "html")
         {
-            const attr = bodyAttrsArray[i];
-            if (attr.includes("class="))
-            {
-                const classes = attr.split("=")[1].replace(/"/g, "");
-                const classesArray = classes.split(" ");
-                for (let j = 0; j < classesArray.length; j++)
-                {
-                    const className = classesArray[j];
-                    if (className !== undefined && className !== null && className !== "")
-                    {
-                        const classToAdd = "document.body.classList.add(\"" + className + "\");\n";
-                        if (!componentDidMountPage.includes(classToAdd))
-                        {
-                            componentDidMountPage += classToAdd;
-                        }
-                    }
-                }
-            }
+            filesExist = true;
+            break;
         }
     }
 
-    let imports = [];
+    if (!filesExist)
+    {
+        checkHtml.fail("No HTML files found");
+        exit
+    }
+    else
+    {
+        checkHtml.succeed("Found HTML files");
+    }
+}
 
+/**
+ * Create a folder
+ */
+function createFolder(folder)
+{
+    let createFolderLoader = load("Creating " + folder + " folder");
+    fs.mkdirSync(folder);
+    createFolderLoader.succeed("Created " + folder + " folder");
+}
+
+/**
+ * Clear a single folder
+ */
+function clearFolder(folder)
+{
+    if (fs.existsSync(folder))
+    {
+        let clearFolderLoader = load("Clearing " + folder + " folder");
+        fs.rmSync(folder, { recursive: true }, (err) =>
+        {
+            if (err)
+            {
+                clearFolderLoader.fail("Failed to clear " + folder + " folder");
+                throw err;
+            }
+        });
+        clearFolderLoader.succeed("Cleared " + folder + " folder");
+    }
+}
+
+/**
+ * Clear previous output
+ */
+function clearFolders()
+{
+    // Clear and create conversion folder
+    clearFolder(conversionFolder);
+    createFolder(conversionFolder);
+
+    // Clear and create assets folder
+    clearFolder(conversionAssets);
+    createFolder(conversionAssets);
+
+    // Clear and create pages folder
+    clearFolder(conversionPages);
+    createFolder(conversionPages);
+
+    // Clear and create layouts folder
+    clearFolder(conversionLayouts);
+    createFolder(conversionLayouts);
+
+    // Clear and create Components folder
+    clearFolder(conversionComponents);
+    createFolder(conversionComponents);
+
+    // Clear and create scss folder
+    clearFolder(conversionScss);
+    createFolder(conversionScss);
+
+    // Clear and create js folder
+    clearFolder(conversionJs);
+    createFolder(conversionJs);
+
+    // Clear and create images folder
+    clearFolder(conversionImg);
+    createFolder(conversionImg);
+
+    // Clear and create css folder
+    clearFolder(conversionCss);
+    createFolder(conversionCss);
+
+    // Clear and create fonts folder
+    clearFolder(conversionFonts);
+    createFolder(conversionFonts);
+
+
+    // Clear vite folder
+    clearFolder(viteFolder);
+}
+
+/**
+* Ensure that the user specified a process for the script. Either "function" or "class"
+*/
+function checkProcess()
+{
+    if (!processName)
+    {
+        log('Usage: node migration.js <process?function,class>')
+        process.exit(1)
+    }
+}
+
+/**
+ * Handle page title
+ */
+function handlePageTitle(root)
+{
     // Extract page title
     const titleTag = root.querySelector("title");
     let pageTitle;
@@ -445,43 +503,77 @@ function handleFile(html, logPrefix, name, findComponents)
         pageTitleLoader.succeed(logPrefix + " - Extracted page title");
     }
 
-    functionName = name;
+    return pageTitle;
+}
 
-    var JSXFunctionStart = createFunctionStart(functionName, pageTitle);
-
-    if (findComponents)
+function extractComponent(root, component)
+{
+    const Component = root.querySelector(component);
+    if (Component !== null)
     {
-        // Extract <header> and <footer> from file
-        const Header = root.querySelector("header");
-        if (Header !== null)
-        {
-            const extractHeaderLoader = load(logPrefix + " - Extracting Header");
-            HeaderContents = Header;
-            Header.remove();
-            extractHeaderLoader.succeed(logPrefix + " - Extracted Header");
-        }
+        const extractorLoader = load(logPrefix + " - Extracting " + component);
+        Component.remove();
+        extractorLoader.succeed(logPrefix + " - Extracted " + component);
 
-        const Footer = root.querySelector("footer");
-        if (Footer !== null)
-        {
-            const extractFooterLoader = load(logPrefix + " - Extracting Footer");
-            FooterContents = Footer;
-            Footer.remove();
-            extractFooterLoader.succeed(logPrefix + " - Extracted Footer");
-        }
+        return Component;
+    }
+    else
+    {
+        return null;
+    }
+}
 
-        const Sidebar = root.querySelector("aside");
-        if (Sidebar !== null)
+/**
+ * Extract Components
+ */
+function extractComponents(root)
+{
+    // Extract <header> and <footer> from file
+    HeaderContents = extractComponent(root, "Header");
+
+    FooterContents = extractComponent(root, "Footer");
+
+    SidebarContents = extractComponent(root, "Sidebar");
+}
+
+/**
+ * Handle Body
+ */
+function handleBody(body)
+{
+    const bodyAttrs = body.rawAttrs;
+    const bodyAttrsArray = bodyAttrs.split(" ");
+    for (let i = 0; i < bodyAttrsArray.length; i++)
+    {
+        const attr = bodyAttrsArray[i];
+        if (attr.includes("class="))
         {
-            const extractSidebarLoader = load(logPrefix + " - Extracting Sidebar");
-            SidebarContents = Sidebar;
-            Sidebar.remove();
-            extractSidebarLoader.succeed(logPrefix + " - Extracted Sidebar");
+            const classes = attr.split("=")[1].replace(/"/g, "");
+            const classesArray = classes.split(" ");
+            for (let j = 0; j < classesArray.length; j++)
+            {
+                const className = classesArray[j];
+                if (className !== undefined && className !== null && className !== "")
+                {
+                    const classToAdd = "document.body.classList.add(\"" + className + "\");\n";
+                    if (!componentDidMountPage.includes(classToAdd))
+                    {
+                        componentDidMountPage += classToAdd;
+                    }
+                }
+            }
         }
     }
+}
 
+/**
+ * Handle Images
+ */
+function handleImages(root)
+{
     // Resolve unclosed img tags
     let importImgLoader = load(logPrefix + " - Importing and converting img tag");
+
     const imgTags = root.querySelectorAll("img");
     imgTags.forEach(imgTag =>
     {
@@ -491,17 +583,11 @@ function handleFile(html, logPrefix, name, findComponents)
             if (fs.existsSync(imgSrc))
             {
                 // Create img folder if it doesn't exist
-                const imgFolder = assetsFolder + "/img";
                 let imgDest;
 
                 if (imgSrc.startsWith("/"))
                 {
                     imgDest = imgSrc.substring(1);
-                }
-
-                if (!fs.existsSync(imgFolder))
-                {
-                    fs.mkdirSync(imgFolder);
                 }
 
                 if (imgSrc.includes("img/") || imgSrc.includes("images/"))
@@ -514,7 +600,7 @@ function handleFile(html, logPrefix, name, findComponents)
                 const imgSrcFolders = imgDest.split("/");
                 if (imgSrcFolders.length > 1)
                 {
-                    let folderPath = imgFolder;
+                    let folderPath = conversionImg;
                     for (let i = 0; i < imgSrcFolders.length - 1; i++)
                     {
                         folderPath += "/" + imgSrcFolders[i];
@@ -525,7 +611,7 @@ function handleFile(html, logPrefix, name, findComponents)
                     }
                 }
 
-                fs.copyFile("./" + imgSrc, imgFolder + imgDest, (err) =>
+                fs.copyFile("./" + imgSrc, conversionImg + imgDest, (err) =>
                 {
                     if (err)
                     {
@@ -553,7 +639,7 @@ function handleFile(html, logPrefix, name, findComponents)
                     fileName = fileName.charAt(0).toUpperCase() + fileName.slice(1);
                 }
 
-                const fullImport = "import " + fileName + " from '" + imgFolder.replace('./jsx/', '../') + imgDest + "';";
+                const fullImport = "import " + fileName + " from '" + importImg + imgDest + "';";
 
                 if (!imports.includes(fullImport))
                 {
@@ -585,8 +671,13 @@ function handleFile(html, logPrefix, name, findComponents)
     });
 
     importImgLoader.succeed(logPrefix + " - Imported and converted img tag");
+}
 
-
+/**
+ * Handle Inputs
+ */
+function handleInputs(root)
+{
     // Resolve unclosed input tags
     const fixInputLoader = load(logPrefix + " - Fixing unclosed input tags");
     const inputTags = root.querySelectorAll("input");
@@ -598,7 +689,13 @@ function handleFile(html, logPrefix, name, findComponents)
         }
     });
     fixInputLoader.succeed(logPrefix + " - Fixed unclosed input tags");
+}
 
+/**
+ * Handle styles
+ */
+function handleStyles(root)
+{
     // Convert css link to import
     const cssConvertLoader = load(logPrefix + " - Converting css link to import");
     const cssLinkTags = root.querySelectorAll("link[rel='stylesheet']");
@@ -610,17 +707,10 @@ function handleFile(html, logPrefix, name, findComponents)
         // Look for file in current directory
         if (fs.existsSync(link))
         {
-            const cssFolder = assetsFolder + "/css";
-            const scssFolder = assetsFolder + "/scss";
-
             const scssExtension = ".scss";
-            // Look for scss files in the current directory and subdirectories
             const cssFileNoExtension = link.split(".").shift();
-
-            // Replace "css" with "scss" in file name
-            const cssFileToFind = cssFileNoExtension.replace("css", "scss");
-
-            const scssFile = findFile(cssFileToFind + scssExtension);
+            const scssFileToFind = cssFileNoExtension.replace("css", "scss");
+            const scssFile = findFile(scssFileToFind + scssExtension);
 
             if (scssFile !== false)
             {
@@ -629,19 +719,13 @@ function handleFile(html, logPrefix, name, findComponents)
                     dependencies.push("sass");
                 }
 
-                console.log(chalk.yellow(logPrefix + " - Found scss file with the same name as the css file: " + scssFile));
-                if (!fs.existsSync(scssFolder))
-                {
-                    fs.mkdirSync(scssFolder);
-                }
-
                 const scssFileNoPathFound = scssFile.split("/").pop();
                 const scssFilePathFound = scssFile.replace(scssFileNoPathFound, "");
 
                 // Find all scss files in the same directory as the scss file found
                 const scssFiles = findFiles(scssFilePathFound, scssExtension);
 
-                fs.copyFile("./" + scssFile, scssFolder + "/" + scssFileNoPathFound, (err) =>
+                fs.copyFile("./" + scssFile, conversionScss + "/" + scssFileNoPathFound, (err) =>
                 {
                     if (err)
                     {
@@ -654,7 +738,7 @@ function handleFile(html, logPrefix, name, findComponents)
                 {
                     const scssFile = scssFiles[i];
                     const scssFileNoPath = scssFile.split("/").pop();
-                    fs.copyFile("./" + scssFilePathFound + scssFile, scssFolder + "/" + scssFileNoPath, (err) =>
+                    fs.copyFile("./" + scssFilePathFound + scssFile, conversionScss + "/" + scssFileNoPath, (err) =>
                     {
                         if (err)
                         {
@@ -668,7 +752,7 @@ function handleFile(html, logPrefix, name, findComponents)
                 {
                     const scssFile = scssFiles[i];
                     const scssFileNoPath = scssFile.split("/").pop();
-                    const scssFileContent = fs.readFileSync(scssFolder + "/" + scssFileNoPath, "utf8");
+                    const scssFileContent = fs.readFileSync("./" + scssFilePathFound + scssFile, "utf8");
 
                     const urls = scssFileContent.match(/url\((.*?)\)/g);
                     if (urls !== null)
@@ -683,9 +767,9 @@ function handleFile(html, logPrefix, name, findComponents)
                             {
                                 if (!isImagePath(url))
                                 {
-                                    const newUrl = url.replace(urlPath, "../" + imagesDist + "/" + urlFileName);
+                                    const newUrl = url.replace(url, "url('" + scssImportImg + "/" + urlFileName + ")");
                                     const newScssFileContent = scssFileContent.replace(url, newUrl);
-                                    fs.writeFileSync(scssFolder + "/" + scssFileNoPath, newScssFileContent, "utf8");
+                                    fs.writeFileSync(conversionScss + "/" + scssFileNoPath, newScssFileContent, "utf8");
                                 }
                             }
                         }
@@ -696,7 +780,7 @@ function handleFile(html, logPrefix, name, findComponents)
                 cssLinkTag.remove();
 
                 // Add the scss import to the imports array
-                const scssImport = "import '" + scssFolder.replace('./jsx/', '../') + "/" + scssFileNoPathFound + "';";
+                const scssImport = "import '" + importScss + "/" + scssFileNoPathFound + "';";
 
                 if (!imports.includes(scssImport))
                 {
@@ -705,21 +789,15 @@ function handleFile(html, logPrefix, name, findComponents)
             }
             else
             {
-                // Create css folder if it doesn't exist
-                if (!fs.existsSync(cssFolder))
-                {
-                    fs.mkdirSync(cssFolder);
-                }
-
-                let dest = stripPath(link);
+                const cssFileNoPath = link.split("/").pop();
 
                 // Fix paths in css files
                 const cssFileContent = fs.readFileSync(link, "utf8");
                 const cssFileContentFixed = cssFileContent.replace(/url\((.*?)\)/g, "url(../img/$1)");
-                fs.writeFileSync(cssFolder + "/" + dest, cssFileContentFixed);
+                fs.writeFileSync(conversionCss + "/" + cssFileNoPath, cssFileContentFixed);
 
                 // Copy file to assets folder
-                const cssImport = "import '" + cssFolder.replace('./jsx/', '../') + dest + "';";
+                const cssImport = "import '" + importCss + "/" + cssFileNoPath + "';";
                 imports.push(cssImport);
             }
 
@@ -731,7 +809,13 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     cssConvertLoader.succeed(logPrefix + " - Converted css link to import");
+}
 
+/**
+ * Handle Javascript
+ */
+function handleJavascript(root)
+{
     // Convert js link to import
     const jsConvertLoader = load(logPrefix + " - Converting js link to import");
     const jsLinkTags = root.querySelectorAll("script[src]");
@@ -745,17 +829,11 @@ function handleFile(html, logPrefix, name, findComponents)
             // Look for file in current directory
             if (fs.existsSync(link))
             {
-                const jsFolder = assetsFolder + "/js";
-                // Create js folder if it doesn't exist
-                if (!fs.existsSync(jsFolder))
-                {
-                    fs.mkdirSync(jsFolder);
-                }
 
                 let dest = stripPath(link);
 
                 // Copy file to assets folder
-                fs.copyFileSync("./" + link, jsFolder + "/" + dest);
+                fs.copyFileSync("./" + link, conversionJs + "/" + dest);
 
                 // File is extra javascript, put in main layout componentdidmount
                 const fileContents = fs.readFileSync(link, "utf8");
@@ -777,7 +855,13 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     jsConvertLoader.succeed(logPrefix + " - Converted js link to import");
+}
 
+/**
+ * Handle Inline Javascript
+ */
+function handleInlineJavascript(root)
+{
     const inlineJsConvertLoader = load(logPrefix + " - Converting inline js to componentDidMount");
     const inlineJsTags = root.querySelectorAll("script:not([src])");
     for (let i = 0; i < inlineJsTags.length; i++)
@@ -792,7 +876,13 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     inlineJsConvertLoader.succeed(logPrefix + " - Converted inline js to componentDidMount");
+}
 
+/**
+ * Handle inline styles
+ */
+function handleInlineStyles(root)
+{
     const inlineCssConvertLoader = load(logPrefix + " - Converting inline css to componentDidMount");
     const inlineCssTags = root.querySelectorAll("style");
     for (let i = 0; i < inlineCssTags.length; i++)
@@ -804,7 +894,13 @@ function handleFile(html, logPrefix, name, findComponents)
     }
 
     inlineCssConvertLoader.succeed(logPrefix + " - Converted inline css to componentDidMount");
+}
 
+/**
+ * Handle WOW.js
+ */
+function handleWow(root)
+{
     // Detect wow.js from class
     const lookforWow = load(logPrefix + " - Detecting wow.js from class");
     const wowTags = root.querySelectorAll(".wow");
@@ -872,7 +968,13 @@ function handleFile(html, logPrefix, name, findComponents)
     {
         lookforWow.succeed(logPrefix + " - Didn't detect wow.js from class");
     }
+}
 
+/**
+ * Handle Meta
+ */
+function handleMeta(root)
+{
     // Remove all meta tags
     const metaConversionLoader = load(logPrefix + " - Removing meta tags");
     const metaTags = root.querySelectorAll("meta");
@@ -882,7 +984,13 @@ function handleFile(html, logPrefix, name, findComponents)
     });
 
     metaConversionLoader.succeed(logPrefix + " - Removed meta tags");
+}
 
+/**
+ * Handle Links
+ */
+function handleLinks(root)
+{
     // Remove remaining <link> tags
     const linkConversionLoader = load(logPrefix + " - Removing link tags");
     const linkTags = root.querySelectorAll("link");
@@ -890,9 +998,14 @@ function handleFile(html, logPrefix, name, findComponents)
     {
         linkTag.remove();
     });
-
     linkConversionLoader.succeed(logPrefix + " - Removed link tags");
+}
 
+/**
+ * Handle pageLinks
+ */
+function handlePageLinks(root)
+{
     const pageLinks = root.querySelectorAll("a");
     pageLinks.forEach(pageLink =>
     {
@@ -915,6 +1028,8 @@ function handleFile(html, logPrefix, name, findComponents)
             {
                 imports.push("import { Link } from 'react-router-dom';\n");
             }
+
+            pageLink.innerHTML = "<Link to='" + newHref + "'>" + pageLink.innerHTML + "</Link>";
         }
         else if (href && href.includes("javascript:"))
         {
@@ -925,6 +1040,8 @@ function handleFile(html, logPrefix, name, findComponents)
             {
                 imports.push("import { Link } from 'react-router-dom';\n");
             }
+
+            pageLink.innerHTML = "<Link to='" + newHref + "'>" + pageLink.innerHTML + "</Link>";
         }
     });
 
@@ -939,10 +1056,20 @@ function handleFile(html, logPrefix, name, findComponents)
     });
 
     aConversionLoader.succeed(logPrefix + " - Converted a to Link");
+}
+
+/**
+ * Convert HTML to JSX
+ */
+function convert(root, logPrefix, fileName)
+{
+    let pageTitle = handlePageTitle(root);
+
+    var JSXFunctionStart = createFunctionStart(fileName, pageTitle);
 
     const jsxConversionLoader = load(logPrefix + " - Converting to JSX");
 
-    // // Convert to JSX
+    // Convert to JSX
     var converter = new HTMLtoJSX({
         createClass: false
     });
@@ -968,47 +1095,8 @@ function handleFile(html, logPrefix, name, findComponents)
         }
     }
 
-    // // Remove quotes arround img src object
+    // Remove quotes arround img src object
     jsx = jsx.replace(/src="(\{.*\})"/g, "src=$1");
-
-    // If element repeats, make it a component
-    const jsxElements = jsx.match(/<.*?>/g);
-    if (jsxElements)
-    {
-        const jsxElementCount = {};
-        jsxElements.forEach(jsxElement =>
-        {
-            if (jsxElementCount[jsxElement])
-            {
-                jsxElementCount[jsxElement]++;
-            }
-            else
-            {
-                jsxElementCount[jsxElement] = 1;
-            }
-        });
-
-        // Check if any elements are repeated more than 3 times
-        for (const jsxElement in jsxElementCount)
-        {
-            if (jsxElementCount[jsxElement] > 3)
-            {
-                // Check if element is a component
-                if (isComponent(jsxElement))
-                {
-                    // Create component
-                    const componentFolder = path.join(__dirname, "src", "components");
-                    const componentFile = path.join(componentFolder, jsxElement.replace("<", "").replace(">", "").toLowerCase() + ".js");
-                    const componentLoad = load(logPrefix + " - Creating component " + jsxElement.replace("<", "").replace(">", "").toLowerCase());
-                    fs.writeFileSync(componentFile, jsxElement);
-                    componentLoad.succeed(logPrefix + " - Created component " + jsxElement.replace("<", "").replace(">", "").toLowerCase());
-
-                    // Replace element with component
-                    jsx = jsx.replace(new RegExp(jsxElement, "g"), jsxElement.replace("<", "").replace(">", "").toLowerCase());
-                }
-            }
-        }
-    }
 
     var JSXFunctionEnd = createFunctionEnd();
 
@@ -1018,73 +1106,25 @@ function handleFile(html, logPrefix, name, findComponents)
 
     jsxConversionLoader.succeed(logPrefix + " - Converted to JSX");
 
-    return jsx;
+    const formatLoader = load(logPrefix + " - Formatting");
+    // Format JSX
+    let formattedJSX = prettier.format(jsx, {
+        semi: false,
+        singleQuote: true,
+        parser: "babel"
+    });
+
+    formatLoader.succeed(logPrefix + " - Formatted");
+
+    return formattedJSX;
 }
 
-
-fs.readdirSync("./").forEach(file =>
-{
-    // If file is html
-    if (file.endsWith(".html"))
-    {
-        // Read file
-        var html = fs.readFileSync(file, 'utf8');
-        const fileName = file.split(".")[0];
-        const logPrefix = file;
-
-        const functionName = createFunction(fileName);
-
-        const jsx = handleFile(html, logPrefix, functionName, true);
-        const jsxFolderLoader = load(logPrefix + " - Looking for JSX folder");
-
-        // Create JSX folder if it doesn't exist
-        if (!fs.existsSync("./jsx"))
-        {
-            fs.mkdirSync("./jsx");
-        }
-
-        // If file exists, delete it
-        if (fs.existsSync("./jsx/" + functionName + ".jsx"))
-        {
-            log(logPrefix + " - Deleting existing file");
-            fs.unlinkSync("./jsx/" + functionName + ".jsx");
-        }
-
-        jsxFolderLoader.succeed(logPrefix + " - Found JSX folder");
-
-        const formatLoader = load(logPrefix + " - Formatting");
-        // Format JSX
-        var formattedJSX = prettier.format(jsx, {
-            semi: false,
-            singleQuote: true,
-            parser: "babel"
-        });
-
-        formatLoader.succeed(logPrefix + " - Formatted");
-
-        const createFileLoader = load(logPrefix + " - Creating file");
-        // Create new 
-        fs.appendFileSync(pagesFolder + "/" + functionName + ".jsx", formattedJSX);
-
-        createFileLoader.succeed(logPrefix + " - Converted to " + pagesFolder + functionName + ".jsx");
-    }
-});
-
-
-// Create components folder
-const createComponentsFolderLoader = load("Creating Components folder");
-if (fs.existsSync("./jsx/" + "./Components/"))
-{
-    fs.rmSync("./jsx/" + "./Components/", { recursive: true });
-}
-
-fs.mkdirSync("./jsx/" + "./Components/");
-
-createComponentsFolderLoader.succeed("Created Components folder");
-
+/**
+ * Handle Component
+ */
 function handleComponent(name, contents)
 {
-    if (contents !== undefined)
+    if (contents !== undefined && contents !== null)
     {
         // Create " + name + " Component
         if (fs.existsSync("./jsx/" + "./Components/" + name + ".jsx"))
@@ -1092,99 +1132,175 @@ function handleComponent(name, contents)
             fs.unlinkSync("./jsx/" + "./Components/" + name + ".jsx");
         }
 
-        const logPrefix = "" + name;
-
+        logPrefix = "" + name;
         const jsx = handleFile(contents, logPrefix, "" + name, false);
-
-        const formatLoader = load(logPrefix + " - Formatting");
-        // Format JSX
-        var formattedJSX = prettier.format(jsx, {
-            semi: false,
-            singleQuote: true,
-            parser: "babel"
-        });
-
-        formatLoader.succeed(logPrefix + " - Formatted");
 
         const createFileLoader = load(logPrefix + " - Creating file");
         // Create new 
-        fs.appendFileSync(componentsFolder + "/" + name + ".jsx", formattedJSX);
+        fs.appendFileSync(conversionComponents + "/" + name + ".jsx", jsx);
 
         createFileLoader.succeed(logPrefix + " - Converted to ./jsx/" + "Components/" + name + ".jsx");
 
     }
 }
 
+/**
+ * Convert all HTML files
+ */
+function convertAllHtml()
+{
+    fs.readdirSync("./").forEach(file =>
+    {
+        // If file is html
+        if (file.endsWith(".html"))
+        {
+            // Read file
+            var html = fs.readFileSync(file, 'utf8');
+            const fileName = file.split(".")[0];
+            logPrefix = file;
+
+            const functionName = createFunction(fileName);
+
+            const jsx = handleFile(html, logPrefix, functionName, true);
+
+            const createFileLoader = load(logPrefix + " - Creating file");
+            // Create new 
+            fs.appendFileSync(conversionPages + "/" + functionName + ".jsx", jsx);
+
+            createFileLoader.succeed(logPrefix + " - Converted to " + conversionScss + functionName + ".jsx");
+        }
+    });
+}
+
+function handleMainLayout()
+{
+    const mainLayoutLoader = load("Creating Main Layout");
+
+    let MainLayoutContents = "import React from 'react';\n";
+    if (HeaderContents !== undefined && HeaderContents !== null)
+    {
+        MainLayoutContents += "import Header from '../Components/Header';\n";
+    }
+    if (FooterContents !== undefined && FooterContents !== null)
+    {
+        MainLayoutContents += "import Footer from '../Components/Footer';\n";
+    }
+
+    if (SidebarContents !== undefined && SidebarContents !== null)
+    {
+        MainLayoutContents += "import Sidebar from '../Components/Sidebar';\n";
+    }
+
+
+    MainLayoutContents += "import { Outlet } from 'react-router-dom';\n";
+    MainLayoutContents += "export default class Main extends React.Component {\n";
+    MainLayoutContents += "    componentDidMount() {\n";
+    MainLayoutContents += componentDidMountJs + "\n";
+    MainLayoutContents += "    }\n";
+    MainLayoutContents += "    render() {\n";
+    MainLayoutContents += "    return (\n";
+    MainLayoutContents += "        <div>\n";
+
+    if (HeaderContents !== undefined && HeaderContents !== null)
+    {
+        MainLayoutContents += "            <Header />\n";
+    }
+
+    if (SidebarContents !== undefined && SidebarContents !== null)
+    {
+        MainLayoutContents += "            <Sidebar />\n";
+    }
+
+    MainLayoutContents += "            <Outlet/>\n";
+
+    if (FooterContents !== undefined && FooterContents !== null)
+    {
+        MainLayoutContents += "            <Footer />\n";
+    }
+
+    MainLayoutContents += "        </div>\n";
+
+    MainLayoutContents += "    );\n";
+
+    MainLayoutContents += "}\n";
+    MainLayoutContents += "}\n";
+
+    if (fs.existsSync(conversionLayouts + "/Main.jsx"))
+    {
+        fs.unlinkSync(conversionLayouts + "/Main.jsx");
+    }
+
+    fs.writeFileSync(conversionLayouts + "/Main.jsx", MainLayoutContents);
+
+    mainLayoutLoader.succeed("Created Main Layout file");
+
+}
+
+/**
+ * ===================== END UTILS =====================
+ */
+
+/**
+ * Start migration
+ */
+log("Starting migration process: " + processName);
+
+htmlExists();
+
+checkProcess();
+
+clearFolders();
+
+function handleFile(html, logPrefix, name, findComponents)
+{
+    imports = [];
+    const root = HTMLParser.parse(html);
+
+    const body = root.querySelector("body");
+    if (body)
+    {
+        handleBody(body);
+    }
+
+    if (findComponents)
+    {
+        extractComponents(root);
+    }
+
+    handleImages(root);
+
+    handleInputs(root);
+
+    handleStyles(root);
+
+    handleJavascript(root);
+
+    handleInlineJavascript(root);
+
+    handleInlineStyles(root);
+
+    handleWow(root);
+
+    handleMeta(root);
+
+    handleLinks(root);
+
+    handlePageLinks(root);
+
+    const jsx = convert(root, logPrefix, name);
+
+    return jsx;
+}
+
+convertAllHtml();
+
 handleComponent("Header", HeaderContents);
 handleComponent("Footer", FooterContents);
 handleComponent("Sidebar", SidebarContents);
 
-
-const mainLayoutLoader = load("Creating Main Layout");
-
-let MainLayoutContents = "import React from 'react';\n";
-if (HeaderContents !== undefined)
-{
-    MainLayoutContents += "import Header from '../Components/Header';\n";
-}
-if (FooterContents !== undefined)
-{
-    MainLayoutContents += "import Footer from '../Components/Footer';\n";
-}
-
-if (SidebarContents !== undefined)
-{
-    MainLayoutContents += "import Sidebar from '../Components/Sidebar';\n";
-}
-
-
-MainLayoutContents += "import { Outlet } from 'react-router-dom';\n";
-MainLayoutContents += "export default class Main extends React.Component {\n";
-MainLayoutContents += "    componentDidMount() {\n";
-MainLayoutContents += componentDidMountJs + "\n";
-MainLayoutContents += "    }\n";
-MainLayoutContents += "    render() {\n";
-MainLayoutContents += "    return (\n";
-MainLayoutContents += "        <div>\n";
-if (HeaderContents !== undefined)
-{
-    MainLayoutContents += "            <Header />\n";
-}
-
-if (SidebarContents !== undefined)
-{
-    MainLayoutContents += "            <Sidebar />\n";
-}
-
-MainLayoutContents += "            <Outlet/>\n";
-
-if (FooterContents !== undefined)
-{
-    MainLayoutContents += "            <Footer />\n";
-}
-
-MainLayoutContents += "        </div>\n";
-
-MainLayoutContents += "    );\n";
-
-MainLayoutContents += "}\n";
-MainLayoutContents += "}\n";
-
-if (fs.existsSync(layoutsFolder + "/Main.jsx"))
-{
-    fs.unlinkSync(layoutsFolder + "/Main.jsx");
-}
-
-fs.writeFileSync(layoutsFolder + "/Main.jsx", MainLayoutContents);
-
-mainLayoutLoader.succeed("Created Main Layout file");
+handleMainLayout();
 
 const viteproject = load("Creating vite project");
-
-if (fs.existsSync(viteFolder))
-{
-    fs.rmSync(viteFolder, { recursive: true });
-}
 
 execute("yarn create vite vite --template react", function (output)
 {
@@ -1198,14 +1314,14 @@ execute("yarn create vite vite --template react", function (output)
     fs.mkdirSync(viteFolder + "/src");
 
     const imports = [];
-    const pages = fs.readdirSync(pagesFolder);
+    const pages = fs.readdirSync(conversionPages);
     pages.forEach(page =>
     {
         const pageName = page.split(".")[0];
-        imports.push("import " + pageName + " from '." + pagesDist + "/" + pageName + "';");
+        imports.push("import " + pageName + " from '" + importPages + "/" + pageName + "';");
     });
 
-    imports.push("import Main from '." + layoutsDist + "/Main';");
+    imports.push("import Main from '" + importLayouts + "/Main';");
 
     const pageImportsToString = imports.join("\n");
 
@@ -1276,31 +1392,31 @@ execute("yarn create vite vite --template react", function (output)
     const copyFilesLoader = load("Copying files");
 
     // Copy components
-    fs.mkdirSync(viteFolder + "/src" + componentsDist);
-    const components = fs.readdirSync(componentsFolder);
+    fs.mkdirSync(viteFolder + "/src" + componentsFolder);
+    const components = fs.readdirSync(conversionComponents);
     components.forEach(component =>
     {
-        fs.copyFileSync(componentsFolder + "/" + component, viteFolder + "/src" + componentsDist + "/" + component);
+        fs.copyFileSync(conversionComponents + "/" + component, viteFolder + "/src" + componentsDist + "/" + component);
     });
 
     // Copy layouts
-    fs.mkdirSync(viteFolder + "/src" + layoutsDist);
-    const layouts = fs.readdirSync(layoutsFolder);
+    fs.mkdirSync(viteFolder + "/src" + layoutsFolder);
+    const layouts = fs.readdirSync(conversionLayouts);
     layouts.forEach(layout =>
     {
-        fs.copyFileSync(layoutsFolder + "/" + layout, viteFolder + "/src" + layoutsDist + "/" + layout);
+        fs.copyFileSync(conversionLayouts + "/" + layout, viteFolder + "/src" + layoutsFolder + "/" + layout);
     });
 
     // Copy pages
-    fs.mkdirSync(viteFolder + "/src" + pagesDist);
+    fs.mkdirSync(viteFolder + "/src" + pagesFolder);
     pages.forEach(page =>
     {
-        fs.copyFileSync(pagesFolder + "/" + page, viteFolder + "/src" + pagesDist + "/" + page);
+        fs.copyFileSync(conversionPages + "/" + page, viteFolder + "/src" + pagesFolder + "/" + page);
     });
 
     // Copy assets
-    fs.mkdirSync(viteFolder + "/src" + assetsDist);
-    fse.copySync(assetsFolder, viteFolder + "/src" + assetsDist);
+    fs.mkdirSync(viteFolder + "/src" + assetsFolder);
+    fse.copySync(conversionAssets, viteFolder + "/src" + assetsFolder);
 
     copyFilesLoader.succeed("Copied files");
 
