@@ -506,36 +506,6 @@ function handlePageTitle(root)
     return pageTitle;
 }
 
-function extractComponent(root, component)
-{
-    const Component = root.querySelector(component);
-    if (Component !== null)
-    {
-        const extractorLoader = load(logPrefix + " - Extracting " + component);
-        Component.remove();
-        extractorLoader.succeed(logPrefix + " - Extracted " + component);
-
-        return Component;
-    }
-    else
-    {
-        return null;
-    }
-}
-
-/**
- * Extract Components
- */
-function extractComponents(root)
-{
-    // Extract <header> and <footer> from file
-    HeaderContents = extractComponent(root, "Header");
-
-    FooterContents = extractComponent(root, "Footer");
-
-    SidebarContents = extractComponent(root, "Sidebar");
-}
-
 /**
  * Handle Body
  */
@@ -1167,7 +1137,7 @@ function convertAllHtml()
             // Create new 
             fs.appendFileSync(conversionPages + "/" + functionName + ".jsx", jsx);
 
-            createFileLoader.succeed(logPrefix + " - Converted to " + conversionScss + functionName + ".jsx");
+            createFileLoader.succeed(logPrefix + " - Converted to " + conversionPages + "/" + functionName + ".jsx");
         }
     });
 }
@@ -1264,7 +1234,38 @@ function handleFile(html, logPrefix, name, findComponents)
 
     if (findComponents)
     {
-        extractComponents(root);
+        const componentsToExtract = [
+            "header",
+            "footer",
+            "sidebar"
+        ]
+
+        for (let i = 0; i < componentsToExtract.length; i++)
+        {
+            const componentToExtract = componentsToExtract[i];
+            const component = root.querySelector(componentToExtract);
+            if (component)
+            {
+                const extractorLoader = load(logPrefix + " - Extracting " + componentToExtract);
+                switch (componentToExtract)
+                {
+                    case "header":
+                        HeaderContents = component;
+                        component.remove();
+                        break;
+                    case "footer":
+                        FooterContents = component;
+                        component.remove();
+                        break;
+                    case "sidebar":
+                        SidebarContents = component;
+                        component.remove();
+                        break;
+                }
+
+                extractorLoader.succeed(logPrefix + " - Extracted " + componentToExtract);
+            }
+        }
     }
 
     handleImages(root);
@@ -1396,7 +1397,7 @@ execute("yarn create vite vite --template react", function (output)
     const components = fs.readdirSync(conversionComponents);
     components.forEach(component =>
     {
-        fs.copyFileSync(conversionComponents + "/" + component, viteFolder + "/src" + componentsDist + "/" + component);
+        fs.copyFileSync(conversionComponents + "/" + component, viteFolder + "/src" + componentsFolder + "/" + component);
     });
 
     // Copy layouts
