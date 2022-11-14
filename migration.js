@@ -7,7 +7,6 @@ import chalk from 'chalk';
 import { exit } from 'process';
 import HTMLParser from 'node-html-parser';
 import fse from 'fs-extra';
-import path from 'path';
 
 /**
  * ===================== START UTILS =====================
@@ -57,13 +56,14 @@ const importFonts = importAssets + fontsFolder;
 /**
  * Vars
  */
-let componentDidMountJs = "";
-let componentDidMountPage = "";
+let componentDidMountMain = [];
+let componentDidMountPage = [];
 let functionName = "";
 let HeaderContents, FooterContents, SidebarContents;
 let dependencies = [];
 let imports = [];
 let logPrefix = "";
+let imgFolderFound = false;
 
 /**
  * Find files in a directory recursively
@@ -240,7 +240,7 @@ function createFunctionStart(name, pageTitle)
                 componentDidMountPage = componentDidMountPage.replace("undefined", "");
             }
 
-            JSXFunctionStart += componentDidMountPage;
+            JSXFunctionStart += componentDidMountPage.join("\n");
         }
 
         JSXFunctionStart += "    return (\n";
@@ -255,14 +255,14 @@ function createFunctionStart(name, pageTitle)
         JSXFunctionStart += "    }\n\n";
         JSXFunctionStart += "    componentDidMount() {\n";
 
-        if (appendTitle === 1)
+        if (appendTitle === 1 && !isComponent(name))
         {
             JSXFunctionStart += "        document.title = \"" + pageTitle + "\";\n";
         }
 
-        if (componentDidMountPage !== undefined && componentDidMountPage !== null)
+        if (componentDidMountPage !== undefined && componentDidMountPage !== null && !isComponent(name))
         {
-            JSXFunctionStart += componentDidMountPage;
+            JSXFunctionStart += componentDidMountPage.join("\n");
         }
 
         JSXFunctionStart += "    }\n\n";
@@ -528,7 +528,12 @@ function handleBody(body)
                     const classToAdd = "document.body.classList.add(\"" + className + "\");\n";
                     if (!componentDidMountPage.includes(classToAdd))
                     {
-                        componentDidMountPage += classToAdd;
+                        componentDidMountPage.push(classToAdd);
+                    }
+                    else
+                    {
+                        componentDidMountPage.remove(classToAdd);
+                        componentDidMountMain.push(classToAdd);
                     }
                 }
             }
@@ -740,6 +745,20 @@ function handleStyles(root)
                                     const newUrl = url.replace(url, "url('" + scssImportImg + "/" + urlFileName + ")");
                                     const newScssFileContent = scssFileContent.replace(url, newUrl);
                                     fs.writeFileSync(conversionScss + "/" + scssFileNoPath, newScssFileContent, "utf8");
+
+                                    const imageFileName = urlPath.split("/").pop();
+                                    let newPath = findFile(imageFileName);
+                                    if (newPath !== false)
+                                    {
+                                        newPath = newPath.replace(imageFileName, "");
+                                        fs.copyFile("./" + urlPath, conversionScss + "/" + newPath + imageFileName, (err) =>
+                                        {
+                                            if (err)
+                                            {
+                                                throw err;
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -773,6 +792,29 @@ function handleStyles(root)
 
         }
 
+        // Find images in css file
+        const cssFileContent = fs.readFileSync(link, "utf8");
+        const urls = cssFileContent.match(/url\((.*?)\)/g);
+        if (urls !== null)
+        {
+            for (let i = 0; i < urls.length; i++)
+            {
+                const url = urls[i];
+                const urlPath = url.split("(").pop().split(")").shift();
+                const urlFileName = urlPath.split("/").pop();
+                // Check if url contains image
+                if (url.includes(".png") || url.includes(".jpg") || url.includes(".jpeg") || url.includes(".gif"))
+                {
+                    if (!isImagePath(url))
+                    {
+                        const newUrl = url.replace(url, "url('" + scssImportImg + "/" + urlFileName + ")");
+                        const newCssFileContent = cssFileContent.replace(url, newUrl);
+                        fs.writeFileSync(conversionCss + "/" + urlFileName, newCssFileContent, "utf8");
+                    }
+                }
+            }
+        }
+
 
         // Remove link tag
         cssLinkTag.remove();
@@ -800,17 +842,122 @@ function handleJavascript(root)
             if (fs.existsSync(link))
             {
 
-                let dest = stripPath(link);
+                const possibleLibraries = [
+                    "jquery",
+                    "bootstrap",
+                    "popper",
+                    "fontawesome",
+                    "slick",
+                    "aos",
+                    "fancybox",
+                    "jqueryui",
+                    "tiny-slider",
+                    "glightbox",
+                ]
 
-                // Copy file to assets folder
-                fs.copyFileSync("./" + link, conversionJs + "/" + dest);
-
-                // File is extra javascript, put in main layout componentdidmount
-                const fileContents = fs.readFileSync(link, "utf8");
-
-                if (!fileContents.includes("WOW"))
+                let importFile = true;
+                for (let i = 0; i < possibleLibraries.length; i++)
                 {
-                    componentDidMountJs = fileContents;
+                    let library = possibleLibraries[i];
+                    if (link.includes(library))
+                    {
+                        importFile = false;
+                        switch (library)
+                        {
+                            case "jquery":
+                                imports.push("import $ from 'jquery';");
+                                dependencies.push("jquery");
+                                break;
+                            case "bootstrap":
+                                imports.push("import 'bootstrap';");
+                                dependencies.push("bootstrap");
+                                break;
+                            case "popper":
+                                imports.push("import 'popper.js';");
+                                dependencies.push("popper.js");
+                                break;
+                            case "fontawesome":
+                                imports.push("import '@fortawesome/fontawesome-free';");
+                                dependencies.push("@fortawesome/fontawesome-free");
+                                break;
+                            case "slick":
+                                imports.push("import 'slick-carousel';");
+                                dependencies.push("slick-carousel");
+                                break;
+                            case "aos":
+                                imports.push("import AOS from 'aos';");
+                                dependencies.push("aos");
+                                if (!componentDidMountPage.includes("AOS.init();"))
+                                {
+                                    componentDidMountPage.push("AOS.init();");
+                                }
+                                else
+                                {
+                                    componentDidMountMain.push("AOS.init();");
+                                    componentDidMountPage.remove("AOS.init();");
+                                }
+                                break;
+                            case "fancybox":
+                                imports.push("import '@fancyapps/fancybox';");
+                                dependencies.push("@fancyapps/fancybox");
+                                break;
+                            case "jqueryui":
+                                imports.push("import 'jquery-ui';");
+                                dependencies.push("jquery-ui");
+                                break;
+                            case "tiny-slider":
+                                imports.push("import { tns } from '../../node_modules/tiny-slider/src/tiny-slider';");
+                                dependencies.push("tiny-slider");
+                                break;
+                            case "glightbox":
+                                imports.push("import GLightbox from 'glightbox';");
+                                dependencies.push("glightbox");
+                                if (!componentDidMountPage.includes("GLightbox"))
+                                {
+                                    componentDidMountPage.push("new GLightbox({selector: '.glightbox'});");
+                                }
+                                else
+                                {
+                                    componentDidMountMain.push("new GLightbox({selector: '.glightbox'});");
+                                    componentDidMountPage.remove("new GLightbox({selector: '.glightbox'});");
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+
+                        if (library === "bootstrap")
+                        {
+                            if (!dependencies.includes("@popperjs/core"))
+                            {
+                                dependencies.push("@popperjs/core");
+                            }
+                        }
+                    }
+                }
+
+                if (importFile)
+                {
+                    let finalLink = link;
+                    if (link.includes(".min"))
+                    {
+                        const jsFileNoExtension = link.split(".").shift();
+                        const jsFileToFind = jsFileNoExtension.replace(".min", "");
+                        const jsFile = findFile(jsFileToFind + ".js");
+                        if (jsFile !== false)
+                        {
+                            finalLink = jsFile;
+                        }
+                    }
+
+                    let jsFileContents = fs.readFileSync(finalLink, "utf8");
+                    // Check if there is WOW.js in the file
+                    if (jsFileContents.includes("new WOW().init();"))
+                    {
+                        // Strip out the WOW.js code
+                        jsFileContents = jsFileContents.replace(/new WOW\(\)\.init\(\);/g, "");
+                    }
+                    componentDidMountPage.push(jsFileContents);
                 }
             }
             else if (link.includes("https://"))
@@ -840,7 +987,10 @@ function handleInlineJavascript(root)
         const fileContents = inlineJsTag.innerHTML;
         if (!fileContents.includes("WOW"))
         {
-            componentDidMountJs = fileContents;
+            if (!componentDidMountPage.includes(fileContents))
+            {
+                componentDidMountPage.push(fileContents);
+            }
         }
         inlineJsTag.remove();
     }
@@ -957,7 +1107,7 @@ function handleMeta(root)
 }
 
 /**
- * Handle Links
+ * Handle  s
  */
 function handleLinks(root)
 {
@@ -983,6 +1133,11 @@ function handlePageLinks(root)
         let newHref = href;
         if (href && href.includes(".html"))
         {
+            if (!imports.includes("import { Link } from 'react-router-dom';\n"))
+            {
+                imports.push("import { Link } from 'react-router-dom';\n");
+            }
+
             if (href.includes("index.html"))
             {
                 newHref = "/";
@@ -992,40 +1147,35 @@ function handlePageLinks(root)
                 newHref = href.replace(".html", "");
             }
 
-            pageLink.setAttribute("href", newHref);
-
-            if (!imports.includes("import { Link } from 'react-router-dom';\n"))
-            {
-                imports.push("import { Link } from 'react-router-dom';\n");
-            }
-
-            pageLink.innerHTML = "<Link to='" + newHref + "'>" + pageLink.innerHTML + "</Link>";
+            // Remove href attribute and add "to" attribute
+            pageLink.removeAttribute("href");
+            pageLink.setAttribute("to", newHref);
         }
         else if (href && href.includes("javascript:"))
         {
             newHref = "/";
-            pageLink.setAttribute("href", newHref);
+            // Remove href attribute and add "to" attribute
+            pageLink.removeAttribute("href");
+            pageLink.setAttribute("to", newHref);
 
             if (!imports.includes("import { Link } from 'react-router-dom';\n"))
             {
                 imports.push("import { Link } from 'react-router-dom';\n");
             }
-
-            pageLink.innerHTML = "<Link to='" + newHref + "'>" + pageLink.innerHTML + "</Link>";
         }
     });
 
-    // Convert a to Link
-    const aConversionLoader = load(logPrefix + " - Converting a to Link");
-    const aTags = root.querySelectorAll("a");
-    aTags.forEach(aTag =>
-    {
-        const href = aTag.getAttribute("href");
-        const tag = "<Link to='" + href + "'>" + aTag.innerHTML + "</Link>";
-        aTag.replaceWith(tag);
-    });
+    // // Convert a to Link
+    // const aConversionLoader = load(logPrefix + " - Converting a to Link");
+    // const aTags = root.querySelectorAll("a");
+    // aTags.forEach(aTag =>
+    // {
+    //     const href = aTag.getAttribute("href");
+    //     const tag = "<Link to='" + href + "'>" + aTag.innerHTML + "</Link>";
+    //     aTag.replaceWith(tag);
+    // });
 
-    aConversionLoader.succeed(logPrefix + " - Converted a to Link");
+    // aConversionLoader.succeed(logPrefix + " - Converted a to Link");
 }
 
 /**
@@ -1034,6 +1184,27 @@ function handlePageLinks(root)
 function convert(root, logPrefix, fileName)
 {
     let pageTitle = handlePageTitle(root);
+
+    if (componentDidMountPage.length > 0)
+    {
+        // Find images in componentDidMountPage
+        const imgFormats = ["jpg", "jpeg", "png", "gif", "svg"];
+        for (let i = 0; i < imgFormats.length; i++)
+        {
+            const imgFormat = imgFormats[i];
+            if (componentDidMountPage.includes("." + imgFormat))
+            {
+                const imgNamePascalCase = fileName.charAt(0).toUpperCase() + fileName.slice(1);
+                if (!imports.includes("import " + imgNamePascalCase + "Image from" + importImg + "/" + fileName + "." + imgFormat + "';\n"))
+                {
+                    imports.push("import " + imgNamePascalCase + "Image from" + importImg + "/" + fileName + "." + imgFormat + "';\n");
+                }
+
+                componentDidMountPage = componentDidMountPage.replace("." + imgFormat, "Image");
+                break;
+            }
+        }
+    }
 
     var JSXFunctionStart = createFunctionStart(fileName, pageTitle);
 
@@ -1051,6 +1222,21 @@ function convert(root, logPrefix, fileName)
 
     // Replace link with Link
     jsx = jsx.replace(/link/g, "Link");
+
+    const aTags = jsx.match(/<a.*?\/a>/g);
+    if (aTags)
+    {
+        for (let i = 0; i < aTags.length; i++)
+        {
+            const aTag = aTags[i];
+            if (aTag.includes("to="))
+            {
+                const newATag = aTag.replace(/<a/g, "<Link");
+                const newATag2 = newATag.replace(/\/a>/g, "/Link>");
+                jsx = jsx.replace(aTag, newATag2);
+            }
+        }
+    }
 
     const jsxReactLinks = jsx.match(/<Link/g);
     if (jsxReactLinks)
@@ -1072,13 +1258,17 @@ function convert(root, logPrefix, fileName)
 
     const importsToString = imports.join("");
 
-    jsx = importsToString + JSXFunctionStart + jsx + JSXFunctionEnd;
+    let jsxToFormat = importsToString;
+
+    jsxToFormat += JSXFunctionStart;
+    jsxToFormat += jsx;
+    jsxToFormat += JSXFunctionEnd;
 
     jsxConversionLoader.succeed(logPrefix + " - Converted to JSX");
 
     const formatLoader = load(logPrefix + " - Formatting");
     // Format JSX
-    let formattedJSX = prettier.format(jsx, {
+    let formattedJSX = prettier.format(jsxToFormat, {
         semi: false,
         singleQuote: true,
         parser: "babel"
@@ -1164,9 +1354,12 @@ function handleMainLayout()
 
     MainLayoutContents += "import { Outlet } from 'react-router-dom';\n";
     MainLayoutContents += "export default class Main extends React.Component {\n";
-    MainLayoutContents += "    componentDidMount() {\n";
-    MainLayoutContents += componentDidMountJs + "\n";
-    MainLayoutContents += "    }\n";
+    if (componentDidMountMain.length > 0)
+    {
+        MainLayoutContents += "componentDidMount() {\n";
+        MainLayoutContents += componentDidMountMain.join("\n");
+        MainLayoutContents += "}\n";
+    }
     MainLayoutContents += "    render() {\n";
     MainLayoutContents += "    return (\n";
     MainLayoutContents += "        <div>\n";
@@ -1224,6 +1417,8 @@ clearFolders();
 function handleFile(html, logPrefix, name, findComponents)
 {
     imports = [];
+    componentDidMountPage = [];
+
     const root = HTMLParser.parse(html);
 
     const body = root.querySelector("body");
@@ -1314,19 +1509,19 @@ execute("yarn create vite vite --template react", function (output)
     // Create main.jsx
     fs.mkdirSync(viteFolder + "/src");
 
-    const imports = [];
+    const pageImports = [];
     const pages = fs.readdirSync(conversionPages);
     pages.forEach(page =>
     {
         const pageName = page.split(".")[0];
-        imports.push("import " + pageName + " from '" + importPages + "/" + pageName + "';");
+        pageImports.push("import " + pageName + " from '" + importPages + "/" + pageName + "';");
     });
 
-    imports.push("import Main from '" + importLayouts + "/Main';");
+    pageImports.push("import Main from '" + importLayouts + "/Main';");
 
-    const pageImportsToString = imports.join("\n");
+    const pageImportsToString = pageImports.join("\n");
 
-    let mainJSX = "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport {createBrowserRouter,RouterProvider} from 'react-router-dom';" + pageImportsToString;
+    let mainJSX = "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport {createBrowserRouter,RouterProvider} from 'react-router-dom';" + pageImportsToString + "\n";
 
     let pagesToRoute;
 
@@ -1427,11 +1622,11 @@ execute("yarn create vite vite --template react", function (output)
         installLoader.succeed("Installed dependencies");
 
         // Installing dependencies: react-router-dom, react-wow
-        let installDependenciesLoader = load("Adding dependencies: react-router-dom, react-wow");
+        let installDependenciesLoader = load("Adding dependencies: " + dependencies.join(", "));
 
         execute("cd vite && yarn add react-router-dom " + dependencies.join(" "), function (success)
         {
-            installDependenciesLoader.succeed("Added dependencies: react-router-dom, react-wow");
+            installDependenciesLoader.succeed("Added dependencies: " + dependencies.join(", "));
 
             // BUild
             let buildLoader = load("Building");
