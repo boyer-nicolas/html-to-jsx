@@ -586,7 +586,13 @@ function handleImages(root)
                     }
                 }
 
-                fs.copyFile("./" + imgSrc, conversionImg + imgDest, (err) =>
+                // Remove potential "./" from path
+                if (imgDest.includes("./"))
+                {
+                    imgDest = imgDest.replace("./", "/");
+                }
+
+                fs.copyFile(imgSrc, conversionImg + imgDest, (err) =>
                 {
                     if (err)
                     {
@@ -713,57 +719,80 @@ function handleStyles(root)
                 {
                     const scssFile = scssFiles[i];
                     const scssFileNoPath = scssFile.split("/").pop();
-                    fs.copyFile("./" + scssFilePathFound + scssFile, conversionScss + "/" + scssFileNoPath, (err) =>
-                    {
-                        if (err)
-                        {
-                            throw err;
-                        }
-                    });
-                }
 
-                // Fix paths in scss files
-                for (let i = 0; i < scssFiles.length; i++)
-                {
-                    const scssFile = scssFiles[i];
-                    const scssFileNoPath = scssFile.split("/").pop();
-                    const scssFileContent = fs.readFileSync("./" + scssFilePathFound + scssFile, "utf8");
-
-                    const urls = scssFileContent.match(/url\((.*?)\)/g);
-                    if (urls !== null)
+                    // Check if path is folder or file
+                    if (scssFileNoPath.includes("."))
                     {
-                        for (let i = 0; i < urls.length; i++)
+                        fs.copyFile("./" + scssFilePathFound + scssFile, conversionScss + "/" + scssFileNoPath, (err) =>
                         {
-                            const url = urls[i];
-                            const urlPath = url.split("(").pop().split(")").shift();
-                            const urlFileName = urlPath.split("/").pop();
-                            // Check if url contains image
-                            if (url.includes(".png") || url.includes(".jpg") || url.includes(".jpeg") || url.includes(".gif"))
+                            if (err)
                             {
-                                if (!isImagePath(url))
-                                {
-                                    const newUrl = url.replace(url, "url('" + scssImportImg + "/" + urlFileName + ")");
-                                    const newScssFileContent = scssFileContent.replace(url, newUrl);
-                                    fs.writeFileSync(conversionScss + "/" + scssFileNoPath, newScssFileContent, "utf8");
-
-                                    const imageFileName = urlPath.split("/").pop();
-                                    let newPath = findFile(imageFileName);
-                                    if (newPath !== false)
-                                    {
-                                        newPath = newPath.replace(imageFileName, "");
-                                        fs.copyFile("./" + urlPath, conversionScss + "/" + newPath + imageFileName, (err) =>
-                                        {
-                                            if (err)
-                                            {
-                                                throw err;
-                                            }
-                                        });
-                                    }
-                                }
+                                throw err;
                             }
+                        });
+                    }
+                    else
+                    {
+                        const newDestFolder = "./" + conversionScss + "/" + scssFileNoPath;
+                        if (!fs.existsSync(newDestFolder))
+                        {
+                            fs.mkdirSync(newDestFolder);
+                        }
+
+                        // Copy all files in folder
+                        const scssSubFiles = findFiles("./" + scssFilePathFound + scssFile, scssExtension);
+                        for (let i = 0; i < scssSubFiles.length; i++)
+                        {
+                            const scssSubFile = scssSubFiles[i];
+                            const scssSubFileNoPath = scssSubFile.split("/").pop();
+
+                            fs.copyFileSync("./" + scssFilePathFound + scssFile + "/" + scssSubFileNoPath, newDestFolder + "/" + scssSubFileNoPath);
                         }
                     }
                 }
+
+                // // Fix paths in scss files
+                // for (let i = 0; i < scssFiles.length; i++)
+                // {
+                //     const scssFile = scssFiles[i];
+                //     const scssFileNoPath = scssFile.split("/").pop();
+                //     const scssFileContent = fs.readFileSync("./" + scssFilePathFound + scssFile, "utf8");
+
+                //     const urls = scssFileContent.match(/url\((.*?)\)/g);
+                //     if (urls !== null)
+                //     {
+                //         for (let i = 0; i < urls.length; i++)
+                //         {
+                //             const url = urls[i];
+                //             const urlPath = url.split("(").pop().split(")").shift();
+                //             const urlFileName = urlPath.split("/").pop();
+                //             // Check if url contains image
+                //             if (url.includes(".png") || url.includes(".jpg") || url.includes(".jpeg") || url.includes(".gif"))
+                //             {
+                //                 if (!isImagePath(url))
+                //                 {
+                //                     const newUrl = url.replace(url, "url('" + scssImportImg + "/" + urlFileName + ")");
+                //                     const newScssFileContent = scssFileContent.replace(url, newUrl);
+                //                     fs.writeFileSync(conversionScss + "/" + scssFileNoPath, newScssFileContent, "utf8");
+
+                //                     const imageFileName = urlPath.split("/").pop();
+                //                     let newPath = findFile(imageFileName);
+                //                     if (newPath !== false)
+                //                     {
+                //                         newPath = newPath.replace(imageFileName, "");
+                //                         fs.copyFile("./" + urlPath, conversionScss + "/" + newPath + imageFileName, (err) =>
+                //                         {
+                //                             if (err)
+                //                             {
+                //                                 throw err;
+                //                             }
+                //                         });
+                //                     }
+                //                 }
+                //             }
+                //         }
+                //     }
+                // }
 
                 // Remove the css link tag
                 cssLinkTag.remove();

@@ -37,7 +37,7 @@ npm init -y
 # Add type module to package.json
 # Remove last line of package.json
 # Add "type": "module" to package.json
-sed -i '$d' package.json
+sed -i '' -e '$ d' package.json
 echo ',"type": "module"}' >>package.json
 
 npm i prettier node-html-parser ora chalk fs-extra htmltojsx jsdom
